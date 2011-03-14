@@ -1,0 +1,7 @@
+makepkg
+pacman-db-upgrade
+pacman-optimize
+rankmirrors
+repo-add
+repo-remove
+pkgdelta
