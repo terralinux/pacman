@@ -392,7 +392,7 @@ run_pacman() {
 	local cmd
 	printf -v cmd "%q " "$PACMAN" $PACMAN_OPTS "$@"
 	if (( ! ASROOT )) && [[ ! $1 =~ ^-(T|Qq)$ ]]; then
-		if [ "$(type -p sudo)" ]; then
+		if type -p sudo >/dev/null; then
 			cmd="sudo $cmd"
 		else
 			cmd="su -c '$cmd'"
@@ -794,15 +794,15 @@ run_function() {
 		# ensure overridden package variables survive tee with split packages
 		logpipe=$(mktemp -u "$startdir/logpipe.XXXXXXXX")
 		mkfifo "$logpipe"
-		exec 3>&1
 		tee "$BUILDLOG" < "$logpipe" &
-		exec 1>"$logpipe" 2>"$logpipe"
+		local teepid=$!
+
 		restoretrap=$(trap -p ERR)
 		trap 'error_function $pkgfunc' ERR
-		$pkgfunc 2>&1
+		$pkgfunc &>"$logpipe"
 		eval $restoretrap
-		sync
-		exec 1>&3 2>&3 3>&-
+
+		wait $teepid
 		rm "$logpipe"
 	else
 		restoretrap=$(trap -p ERR)
@@ -1068,6 +1068,9 @@ create_package() {
 	local pkg_file="$PKGDEST/${nameofpkg}-${fullver}-${PKGARCH}${PKGEXT}"
 	local ret=0
 
+	[[ -f $pkg_file ]] && rm -f "$pkg_file"
+	[[ -f $pkg_file.sig ]] && rm -f "$pkg_file.sig"
+
 	# when fileglobbing, we want * in an empty directory to expand to
 	# the null string rather than itself
 	shopt -s nullglob
@@ -1089,13 +1092,35 @@ create_package() {
 		exit 1 # TODO: error code
 	fi
 
+	create_signature "$pkg_file"
+
 	if (( ! ret )) && [[ ! "$PKGDEST" -ef "${startdir}" ]]; then
 		ln -sf "${pkg_file}" "${pkg_file/$PKGDEST/$startdir}"
 		ret=$?
+		[[ -f $pkg_file.sig ]] && ln -sf "$pkg_file.sig" "${pkg_file/$PKGDEST/$startdir}.sig"
 	fi
 
 	if (( ret )); then
 		warning "$(gettext "Failed to create symlink to package file.")"
+	fi
+}
+
+create_signature() {
+	if [[ $(check_buildenv sign) != "y" ]]; then
+		return
+	fi
+	local ret=0
+	local filename="$1"
+	msg "$(gettext "Signing package...")"
+	if ! type -p gpg >/dev/null; then
+		error "$(gettext "Cannot find the gpg binary! Is gnupg installed?")"
+		exit 1 # $E_MISSING_PROGRAM
+	fi
+	gpg --detach-sign --use-agent "$filename" || ret=$?
+	if (( ! ret )); then
+		msg2 "$(gettext "Created signature file %s.")" "$filename.sig"
+	else
+		warning "$(gettext "Failed to sign package file.")"
 	fi
 }
 
@@ -1258,7 +1283,8 @@ check_sanity() {
 	fi
 
 	local provides_list=()
-	eval $(awk '/^[[:space:]]*provides=/,/\)/' "$BUILDFILE" | sed "s/provides=/provides_list+=/")
+	eval $(awk '/^[[:space:]]*provides=/,/\)/' "$BUILDFILE" | \
+		sed -e "s/provides=/provides_list+=/" -e "s/#.*//")
 	for i in ${provides_list[@]}; do
 		if [[ $i != ${i//</} || $i != ${i//>/} ]]; then
 			error "$(gettext "Provides array cannot contain comparison (< or >) operators.")"
@@ -1267,7 +1293,8 @@ check_sanity() {
 	done
 
 	local backup_list=()
-	eval $(awk '/^[[:space:]]*backup=/,/\)/' "$BUILDFILE" | sed "s/backup=/backup_list+=/")
+	eval $(awk '/^[[:space:]]*backup=/,/\)/' "$BUILDFILE" | \
+		sed -e "s/backup=/backup_list+=/" -e "s/#.*//")
 	for i in "${backup_list[@]}"; do
 		if [[ ${i:0:1} = "/" ]]; then
 			error "$(gettext "Backup entry should not contain leading slash : %s")" "$i"
@@ -1276,7 +1303,8 @@ check_sanity() {
 	done
 
 	local optdepends_list=()
-	eval $(awk '/^[[:space:]]*optdepends=/,/\)/' "$BUILDFILE" | sed "s/optdepends=/optdepends_list+=/")
+	eval $(awk '/^[[:space:]]*optdepends=\(/,/\)[[:space:]]*(|#.*)$/' "$BUILDFILE" | \
+		sed -e "s/optdepends=/optdepends_list+=/" -e "s/#.*//")
 	for i in "${optdepends_list[@]}"; do
 		local pkg=${i%%:*}
 		if [[ ! $pkg =~ ^[[:alnum:]\>\<\=\.\+\_\-]+$ ]]; then
@@ -1300,7 +1328,8 @@ check_sanity() {
 
 	local valid_options=1
 	local known kopt options_list
-	eval $(awk '/^[[:space:]]*options=/,/\)/' "$BUILDFILE" | sed "s/options=/options_list+=/")
+	eval $(awk '/^[[:space:]]*options=/,/\)/' "$BUILDFILE" | \
+		sed -e "s/options=/options_list+=/" -e "s/#.*//")
 	for i in ${options_list[@]}; do
 		known=0
 		# check if option matches a known option or its inverse
@@ -1684,6 +1713,8 @@ done
 [[ -n ${PKGDEST} ]] && _PKGDEST=$(canonicalize_path ${PKGDEST})
 [[ -n ${SRCDEST} ]] && _SRCDEST=$(canonicalize_path ${SRCDEST})
 [[ -n ${SRCPKGDEST} ]] && _SRCPKGDEST=$(canonicalize_path ${SRCPKGDEST})
+[[ -n ${PKGEXT} ]] && _PKGEXT=${PKGEXT}
+[[ -n ${SRCEXT} ]] && _SRCEXT=${SRCEXT}
 
 # default config is makepkg.conf
 MAKEPKG_CONF=${MAKEPKG_CONF:-$confdir/makepkg.conf}
@@ -1747,6 +1778,8 @@ fi
 SRCPKGDEST=${_SRCPKGDEST:-$SRCPKGDEST}
 SRCPKGDEST=${SRCPKGDEST:-$startdir} #default to $startdir if undefined
 
+PKGEXT=${_PKGEXT:-$PKGEXT}
+SRCEXT=${_SRCEXT:-$SRCEXT}
 
 if (( HOLDVER )) && [[ -n $FORCE_VER ]]; then
 	# The '\\0' is here to prevent gettext from thinking --holdver is an option

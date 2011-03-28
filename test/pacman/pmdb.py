@@ -89,6 +89,12 @@ class pmdb(object):
     def __str__(self):
         return "%s" % self.treename
 
+    def getverify(self):
+        for value in "Always","Never","Optional":
+            if value in self.treename:
+                return value
+        return "Never"
+
     def getpkg(self, name):
         """
         """
@@ -150,6 +156,8 @@ class pmdb(object):
                 pkg.size = int(fd.readline().strip("\n"))
             elif line == "%MD5SUM%":
                 pkg.md5sum = fd.readline().strip("\n")
+            elif line == "%PGPSIG%":
+                pkg.pgpsig = fd.readline().strip("\n")
             elif line == "%REPLACES%":
                 pkg.replaces = _getsection(fd)
             elif line == "%DEPENDS%":
@@ -241,6 +249,8 @@ class pmdb(object):
                 data.append(_mksection("CSIZE", pkg.csize))
             if pkg.md5sum:
                 data.append(_mksection("MD5SUM", pkg.md5sum))
+            if pkg.pgpsig:
+                data.append(_mksection("PGPSIG", pkg.pgpsig))
         if data:
             data.append("")
         filename = os.path.join(path, "desc")

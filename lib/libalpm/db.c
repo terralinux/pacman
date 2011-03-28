@@ -61,7 +61,7 @@ pmdb_t SYMEXPORT *alpm_db_register_sync(const char *treename)
 	/* Do not register a database if a transaction is on-going */
 	ASSERT(handle->trans == NULL, RET_ERR(PM_ERR_TRANS_NOT_NULL, NULL));
 
-	return(_alpm_db_register_sync(treename));
+	return _alpm_db_register_sync(treename);
 }
 
 /* Helper function for alpm_db_unregister{_all} */
@@ -90,12 +90,8 @@ int SYMEXPORT alpm_db_unregister_all(void)
 	/* Do not unregister a database if a transaction is on-going */
 	ASSERT(handle->trans == NULL, RET_ERR(PM_ERR_TRANS_NOT_NULL, -1));
 
-	/* close local database */
-	db = handle->db_local;
-	if(db) {
-		db->ops->unregister(db);
-		handle->db_local = NULL;
-	}
+	/* since the local DB is registered in alpm_initialize(), we'll be
+	 * symmetrical and let the cleanup occur in alpm_release() */
 
 	/* and also sync ones */
 	for(i = handle->dbs_sync; i; i = i->next) {
@@ -104,7 +100,7 @@ int SYMEXPORT alpm_db_unregister_all(void)
 		i->data = NULL;
 	}
 	FREELIST(handle->dbs_sync);
-	return(0);
+	return 0;
 }
 
 /** Unregister a package database
@@ -144,7 +140,7 @@ int SYMEXPORT alpm_db_unregister(pmdb_t *db)
 	}
 
 	db->ops->unregister(db);
-	return(0);
+	return 0;
 }
 
 /** Set the serverlist of a database.
@@ -154,8 +150,6 @@ int SYMEXPORT alpm_db_unregister(pmdb_t *db)
  */
 int SYMEXPORT alpm_db_setserver(pmdb_t *db, const char *url)
 {
-	alpm_list_t *i;
-	int found = 0;
 	char *newurl;
 	size_t len = 0;
 
@@ -163,16 +157,6 @@ int SYMEXPORT alpm_db_setserver(pmdb_t *db, const char *url)
 
 	/* Sanity checks */
 	ASSERT(db != NULL, RET_ERR(PM_ERR_DB_NULL, -1));
-
-	for(i = handle->dbs_sync; i && !found; i = i->next) {
-		pmdb_t *sdb = i->data;
-		if(strcmp(db->treename, sdb->treename) == 0) {
-			found = 1;
-		}
-	}
-	if(!found) {
-		RET_ERR(PM_ERR_DB_NOT_FOUND, -1);
-	}
 
 	if(url) {
 		len = strlen(url);
@@ -191,6 +175,24 @@ int SYMEXPORT alpm_db_setserver(pmdb_t *db, const char *url)
 		_alpm_log(PM_LOG_DEBUG, "serverlist flushed for '%s'\n", db->treename);
 	}
 
+	return 0;
+}
+/** Set the verify gpg signature option for a database.
+ * @param db database pointer
+ * @param verify enum pgp_verify_t
+ * @return 0 on success, -1 on error (pm_errno is set accordingly)
+ */
+int SYMEXPORT alpm_db_set_pgp_verify(pmdb_t *db, pgp_verify_t verify)
+{
+	ALPM_LOG_FUNC;
+
+	/* Sanity checks */
+	ASSERT(db != NULL, RET_ERR(PM_ERR_DB_NULL, -1));
+
+	db->pgp_verify = verify;
+	_alpm_log(PM_LOG_DEBUG, "adding VerifySig option to database '%s': %d\n",
+			db->treename, verify);
+
 	return(0);
 }
 
@@ -203,8 +205,8 @@ const char SYMEXPORT *alpm_db_get_name(const pmdb_t *db)
 	ALPM_LOG_FUNC;
 
 	/* Sanity checks */
-	ASSERT(handle != NULL, return(NULL));
-	ASSERT(db != NULL, return(NULL));
+	ASSERT(handle != NULL, return NULL);
+	ASSERT(db != NULL, return NULL);
 
 	return db->treename;
 }
@@ -220,13 +222,13 @@ const char SYMEXPORT *alpm_db_get_url(const pmdb_t *db)
 	ALPM_LOG_FUNC;
 
 	/* Sanity checks */
-	ASSERT(handle != NULL, return(NULL));
-	ASSERT(db != NULL, return(NULL));
-	ASSERT(db->servers != NULL, return(NULL));
+	ASSERT(handle != NULL, return NULL);
+	ASSERT(db != NULL, return NULL);
+	ASSERT(db->servers != NULL, return NULL);
 
 	url = (char*)db->servers->data;
 
-	return(url);
+	return url;
 }
 
 
@@ -240,11 +242,11 @@ pmpkg_t SYMEXPORT *alpm_db_get_pkg(pmdb_t *db, const char *name)
 	ALPM_LOG_FUNC;
 
 	/* Sanity checks */
-	ASSERT(handle != NULL, return(NULL));
-	ASSERT(db != NULL, return(NULL));
-	ASSERT(name != NULL && strlen(name) != 0, return(NULL));
+	ASSERT(handle != NULL, return NULL);
+	ASSERT(db != NULL, return NULL);
+	ASSERT(name != NULL && strlen(name) != 0, return NULL);
 
-	return(_alpm_db_get_pkgfromcache(db, name));
+	return _alpm_db_get_pkgfromcache(db, name);
 }
 
 /** Get the package cache of a package database
@@ -256,10 +258,10 @@ alpm_list_t SYMEXPORT *alpm_db_get_pkgcache(pmdb_t *db)
 	ALPM_LOG_FUNC;
 
 	/* Sanity checks */
-	ASSERT(handle != NULL, return(NULL));
-	ASSERT(db != NULL, return(NULL));
+	ASSERT(handle != NULL, return NULL);
+	ASSERT(db != NULL, return NULL);
 
-	return(_alpm_db_get_pkgcache(db));
+	return _alpm_db_get_pkgcache(db);
 }
 
 /** Get a group entry from a package database
@@ -272,11 +274,11 @@ pmgrp_t SYMEXPORT *alpm_db_readgrp(pmdb_t *db, const char *name)
 	ALPM_LOG_FUNC;
 
 	/* Sanity checks */
-	ASSERT(handle != NULL, return(NULL));
-	ASSERT(db != NULL, return(NULL));
-	ASSERT(name != NULL && strlen(name) != 0, return(NULL));
+	ASSERT(handle != NULL, return NULL);
+	ASSERT(db != NULL, return NULL);
+	ASSERT(name != NULL && strlen(name) != 0, return NULL);
 
-	return(_alpm_db_get_grpfromcache(db, name));
+	return _alpm_db_get_grpfromcache(db, name);
 }
 
 /** Get the group cache of a package database
@@ -288,10 +290,10 @@ alpm_list_t SYMEXPORT *alpm_db_get_grpcache(pmdb_t *db)
 	ALPM_LOG_FUNC;
 
 	/* Sanity checks */
-	ASSERT(handle != NULL, return(NULL));
-	ASSERT(db != NULL, return(NULL));
+	ASSERT(handle != NULL, return NULL);
+	ASSERT(db != NULL, return NULL);
 
-	return(_alpm_db_get_grpcache(db));
+	return _alpm_db_get_grpcache(db);
 }
 
 /** Searches a database
@@ -304,10 +306,10 @@ alpm_list_t SYMEXPORT *alpm_db_search(pmdb_t *db, const alpm_list_t* needles)
 	ALPM_LOG_FUNC;
 
 	/* Sanity checks */
-	ASSERT(handle != NULL, return(NULL));
-	ASSERT(db != NULL, return(NULL));
+	ASSERT(handle != NULL, return NULL);
+	ASSERT(db != NULL, return NULL);
 
-	return(_alpm_db_search(db, needles));
+	return _alpm_db_search(db, needles);
 }
 
 /** Set install reason for a package in db
@@ -332,16 +334,16 @@ int SYMEXPORT alpm_db_set_pkgreason(pmdb_t *db, const char *name, pmpkgreason_t 
 	_alpm_log(PM_LOG_DEBUG, "setting install reason %u for %s/%s\n", reason, db->treename, name);
 	if(alpm_pkg_get_reason(pkg) == reason) {
 		/* we are done */
-		return(0);
+		return 0;
 	}
 	/* set reason (in pkgcache) */
 	pkg->reason = reason;
 	/* write DESC */
 	if(_alpm_local_db_write(db, pkg, INFRQ_DESC)) {
-		return(-1);
+		return -1;
 	}
 
-	return(0);
+	return 0;
 }
 
 /** @} */
@@ -356,7 +358,35 @@ pmdb_t *_alpm_db_new(const char *treename, int is_local)
 	STRDUP(db->treename, treename, RET_ERR(PM_ERR_MEMORY, NULL));
 	db->is_local = is_local;
 
-	return(db);
+	return db;
+}
+
+const pmpgpsig_t *_alpm_db_pgpsig(pmdb_t *db)
+{
+	ALPM_LOG_FUNC;
+
+	/* Sanity checks */
+	ASSERT(db != NULL, return(NULL));
+
+	if(db->pgpsig.rawdata == NULL) {
+		size_t len;
+		const char *dbfile;
+		char *sigfile;
+		int ret;
+
+		dbfile = _alpm_db_path(db);
+		len = strlen(dbfile) + 5;
+		MALLOC(sigfile, len, RET_ERR(PM_ERR_MEMORY, NULL));
+		sprintf(sigfile, "%s.sig", dbfile);
+
+		/* TODO: do something with ret value */
+		ret = _alpm_load_signature(sigfile, &(db->pgpsig));
+		(void)ret;
+
+		FREE(sigfile);
+	}
+
+	return &(db->pgpsig);
 }
 
 void _alpm_db_free(pmdb_t *db)
@@ -367,6 +397,8 @@ void _alpm_db_free(pmdb_t *db)
 	_alpm_db_free_pkgcache(db);
 	/* cleanup server list */
 	FREELIST(db->servers);
+	/* only need to free rawdata */
+	FREE(db->pgpsig.rawdata);
 	FREE(db->_path);
 	FREE(db->treename);
 	FREE(db);
@@ -377,7 +409,7 @@ void _alpm_db_free(pmdb_t *db)
 const char *_alpm_db_path(pmdb_t *db)
 {
 	if(!db) {
-		return(NULL);
+		return NULL;
 	}
 	if(!db->_path) {
 		const char *dbpath;
@@ -402,22 +434,22 @@ const char *_alpm_db_path(pmdb_t *db)
 		_alpm_log(PM_LOG_DEBUG, "database path for tree %s set to %s\n",
 				db->treename, db->_path);
 	}
-	return(db->_path);
+	return db->_path;
 }
 
 int _alpm_db_version(pmdb_t *db)
 {
 	if(!db) {
-		return(-1);
+		return -1;
 	}
-	return(db->ops->version(db));
+	return db->ops->version(db);
 }
 
 int _alpm_db_cmp(const void *d1, const void *d2)
 {
 	pmdb_t *db1 = (pmdb_t *)d1;
 	pmdb_t *db2 = (pmdb_t *)d2;
-	return(strcmp(db1->treename, db2->treename));
+	return strcmp(db1->treename, db2->treename);
 }
 
 alpm_list_t *_alpm_db_search(pmdb_t *db, const alpm_list_t *needles)
@@ -493,7 +525,7 @@ alpm_list_t *_alpm_db_search(pmdb_t *db, const alpm_list_t *needles)
 		regfree(&reg);
 	}
 
-	return(ret);
+	return ret;
 }
 
 /* Returns a new package cache from db.
@@ -504,7 +536,7 @@ int _alpm_db_load_pkgcache(pmdb_t *db)
 	ALPM_LOG_FUNC;
 
 	if(db == NULL) {
-		return(-1);
+		return -1;
 	}
 	_alpm_db_free_pkgcache(db);
 
@@ -513,11 +545,11 @@ int _alpm_db_load_pkgcache(pmdb_t *db)
 	if(db->ops->populate(db) == -1) {
 		_alpm_log(PM_LOG_DEBUG,
 				"failed to load package cache for repository '%s'\n", db->treename);
-		return(-1);
+		return -1;
 	}
 
 	db->pkgcache_loaded = 1;
-	return(0);
+	return 0;
 }
 
 void _alpm_db_free_pkgcache(pmdb_t *db)
@@ -544,7 +576,7 @@ pmpkghash_t *_alpm_db_get_pkgcache_hash(pmdb_t *db)
 	ALPM_LOG_FUNC;
 
 	if(db == NULL) {
-		return(NULL);
+		return NULL;
 	}
 
 	if(!db->pkgcache_loaded) {
@@ -556,7 +588,7 @@ pmpkghash_t *_alpm_db_get_pkgcache_hash(pmdb_t *db)
 		_alpm_log(PM_LOG_DEBUG, "warning: pkgcache is NULL for db '%s'\n", db->treename);
 	}
 
-	return(db->pkgcache);
+	return db->pkgcache;
 }
 
 alpm_list_t *_alpm_db_get_pkgcache(pmdb_t *db)
@@ -566,10 +598,10 @@ alpm_list_t *_alpm_db_get_pkgcache(pmdb_t *db)
 	pmpkghash_t *hash = _alpm_db_get_pkgcache_hash(db);
 
 	if(hash == NULL) {
-		return(NULL);
+		return NULL;
 	}
 
-	return(hash->list);
+	return hash->list;
 }
 
 /* "duplicate" pkg then add it to pkgcache */
@@ -580,12 +612,12 @@ int _alpm_db_add_pkgincache(pmdb_t *db, pmpkg_t *pkg)
 	ALPM_LOG_FUNC;
 
 	if(db == NULL || !db->pkgcache_loaded || pkg == NULL) {
-		return(-1);
+		return -1;
 	}
 
 	newpkg = _alpm_pkg_dup(pkg);
 	if(newpkg == NULL) {
-		return(-1);
+		return -1;
 	}
 
 	_alpm_log(PM_LOG_DEBUG, "adding entry '%s' in '%s' cache\n",
@@ -594,7 +626,7 @@ int _alpm_db_add_pkgincache(pmdb_t *db, pmpkg_t *pkg)
 
 	_alpm_db_free_grpcache(db);
 
-	return(0);
+	return 0;
 }
 
 int _alpm_db_remove_pkgfromcache(pmdb_t *db, pmpkg_t *pkg)
@@ -604,7 +636,7 @@ int _alpm_db_remove_pkgfromcache(pmdb_t *db, pmpkg_t *pkg)
 	ALPM_LOG_FUNC;
 
 	if(db == NULL || !db->pkgcache_loaded || pkg == NULL) {
-		return(-1);
+		return -1;
 	}
 
 	_alpm_log(PM_LOG_DEBUG, "removing entry '%s' from '%s' cache\n",
@@ -615,14 +647,14 @@ int _alpm_db_remove_pkgfromcache(pmdb_t *db, pmpkg_t *pkg)
 		/* package not found */
 		_alpm_log(PM_LOG_DEBUG, "cannot remove entry '%s' from '%s' cache: not found\n",
 							alpm_pkg_get_name(pkg), db->treename);
-		return(-1);
+		return -1;
 	}
 
 	_alpm_pkg_free(data);
 
 	_alpm_db_free_grpcache(db);
 
-	return(0);
+	return 0;
 }
 
 pmpkg_t *_alpm_db_get_pkgfromcache(pmdb_t *db, const char *target)
@@ -630,17 +662,17 @@ pmpkg_t *_alpm_db_get_pkgfromcache(pmdb_t *db, const char *target)
 	ALPM_LOG_FUNC;
 
 	if(db == NULL) {
-		return(NULL);
+		return NULL;
 	}
 
 	pmpkghash_t *pkgcache = _alpm_db_get_pkgcache_hash(db);
 	if(!pkgcache) {
 		_alpm_log(PM_LOG_DEBUG, "warning: failed to get '%s' from NULL pkgcache\n",
 				target);
-		return(NULL);
+		return NULL;
 	}
 
-	return(_alpm_pkghash_find(pkgcache, target));
+	return _alpm_pkghash_find(pkgcache, target);
 }
 
 /* Returns a new group cache from db.
@@ -652,7 +684,7 @@ int _alpm_db_load_grpcache(pmdb_t *db)
 	ALPM_LOG_FUNC;
 
 	if(db == NULL) {
-		return(-1);
+		return -1;
 	}
 
 	_alpm_log(PM_LOG_DEBUG, "loading group cache for repository '%s'\n",
@@ -690,7 +722,7 @@ int _alpm_db_load_grpcache(pmdb_t *db)
 	}
 
 	db->grpcache_loaded = 1;
-	return(0);
+	return 0;
 }
 
 void _alpm_db_free_grpcache(pmdb_t *db)
@@ -719,14 +751,14 @@ alpm_list_t *_alpm_db_get_grpcache(pmdb_t *db)
 	ALPM_LOG_FUNC;
 
 	if(db == NULL) {
-		return(NULL);
+		return NULL;
 	}
 
 	if(!db->grpcache_loaded) {
 		_alpm_db_load_grpcache(db);
 	}
 
-	return(db->grpcache);
+	return db->grpcache;
 }
 
 pmgrp_t *_alpm_db_get_grpfromcache(pmdb_t *db, const char *target)
@@ -736,18 +768,18 @@ pmgrp_t *_alpm_db_get_grpfromcache(pmdb_t *db, const char *target)
 	ALPM_LOG_FUNC;
 
 	if(db == NULL || target == NULL || strlen(target) == 0) {
-		return(NULL);
+		return NULL;
 	}
 
 	for(i = _alpm_db_get_grpcache(db); i; i = i->next) {
 		pmgrp_t *info = i->data;
 
 		if(strcmp(info->name, target) == 0) {
-			return(info);
+			return info;
 		}
 	}
 
-	return(NULL);
+	return NULL;
 }
 
 /* vim: set ts=2 sw=2 noet: */

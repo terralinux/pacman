@@ -84,6 +84,7 @@ int SYMEXPORT alpm_db_update(int force, pmdb_t *db)
 	struct stat buf;
 	size_t len;
 	int ret;
+	mode_t oldmask;
 
 	ALPM_LOG_FUNC;
 
@@ -104,6 +105,9 @@ int SYMEXPORT alpm_db_update(int force, pmdb_t *db)
 	MALLOC(syncpath, len, RET_ERR(PM_ERR_MEMORY, -1));
 	sprintf(syncpath, "%s%s", dbpath, "sync/");
 
+	/* make sure we have a sane umask */
+	oldmask = umask(0022);
+
 	if(stat(syncpath, &buf) != 0) {
 		_alpm_log(PM_LOG_DEBUG, "database dir '%s' does not exist, creating it\n",
 				syncpath);
@@ -122,23 +126,63 @@ int SYMEXPORT alpm_db_update(int force, pmdb_t *db)
 	}
 
 	ret = _alpm_download_single_file(dbfile, db->servers, syncpath, force);
-	free(dbfile);
-	free(syncpath);
 
 	if(ret == 1) {
 		/* files match, do nothing */
 		pm_errno = 0;
-		return(1);
+		goto cleanup;
 	} else if(ret == -1) {
 		/* pm_errno was set by the download code */
 		_alpm_log(PM_LOG_DEBUG, "failed to sync db: %s\n", alpm_strerrorlast());
-		return(-1);
+		goto cleanup;
+	}
+
+	/* Download and check the signature of the database if needed */
+	if(db->pgp_verify != PM_PGP_VERIFY_NEVER) {
+		char *sigfile, *sigfilepath;
+		int sigret;
+
+		len = strlen(dbfile) + 5;
+		MALLOC(sigfile, len, RET_ERR(PM_ERR_MEMORY, -1));
+		sprintf(sigfile, "%s.sig", dbfile);
+
+		/* prevent old signature being used if the following download fails */
+		len = strlen(syncpath) + strlen(sigfile) + 1;
+		MALLOC(sigfilepath, len, RET_ERR(PM_ERR_MEMORY, -1));
+		sprintf(sigfilepath, "%s%s", syncpath, sigfile);
+		_alpm_rmrf(sigfilepath);
+		free(sigfilepath);
+
+		sigret = _alpm_download_single_file(sigfile, db->servers, syncpath, 0);
+		free(sigfile);
+
+		if(sigret == -1 && db->pgp_verify == PM_PGP_VERIFY_ALWAYS) {
+			_alpm_log(PM_LOG_ERROR, _("Failed to download signature for db: %s\n"),
+					alpm_strerrorlast());
+			pm_errno = PM_ERR_SIG_INVALID;
+			ret = -1;
+			goto cleanup;
+		}
+
+		sigret = alpm_db_check_pgp_signature(db);
+		if((db->pgp_verify == PM_PGP_VERIFY_ALWAYS && sigret != 0) ||
+				(db->pgp_verify == PM_PGP_VERIFY_OPTIONAL && sigret == 1)) {
+			/* pm_errno was set by the checking code */
+			/* TODO: should we just leave the unverified database */
+			ret = -1;
+			goto cleanup;
+		}
 	}
 
 	/* Cache needs to be rebuilt */
 	_alpm_db_free_pkgcache(db);
 
-	return(0);
+cleanup:
+
+	free(dbfile);
+	free(syncpath);
+	umask(oldmask);
+	return ret;
 }
 
 /* Forward decl so I don't reorganize the whole file right now */
@@ -199,7 +243,7 @@ static size_t estimate_package_count(struct stat *st, struct archive *archive)
 			/* assume it is at least somewhat compressed */
 			per_package = 200;
 	}
-	return((size_t)(st->st_size / per_package) + 1);
+	return (size_t)((st->st_size / per_package) + 1);
 }
 
 static int sync_db_populate(pmdb_t *db)
@@ -289,7 +333,7 @@ static int sync_db_populate(pmdb_t *db)
 	}
 	archive_read_finish(archive);
 
-	return(count);
+	return count;
 }
 
 #define READ_NEXT(s) do { \
@@ -329,7 +373,7 @@ static int sync_db_read(pmdb_t *db, struct archive *archive,
 	}
 	if(entryname == NULL) {
 		_alpm_log(PM_LOG_DEBUG, "invalid archive entry provided to _alpm_sync_db_read, skipping\n");
-		return(-1);
+		return -1;
 	}
 
 	_alpm_log(PM_LOG_FUNCTION, "loading package data from archive entry %s\n",
@@ -360,7 +404,7 @@ static int sync_db_read(pmdb_t *db, struct archive *archive,
 	if(pkg == NULL) {
 		_alpm_log(PM_LOG_DEBUG, "package %s not found in %s sync database",
 					pkgname, db->treename);
-		return(-1);
+		return -1;
 	}
 
 	if(strcmp(filename, "desc") == 0 || strcmp(filename, "depends") == 0
@@ -413,6 +457,11 @@ static int sync_db_read(pmdb_t *db, struct archive *archive,
 				pkg->isize = atol(line);
 			} else if(strcmp(line, "%MD5SUM%") == 0) {
 				READ_AND_STORE(pkg->md5sum);
+			} else if(strcmp(line, "%SHA256SUM%") == 0) {
+				/* we don't do anything with this value right now */
+				READ_NEXT(line);
+			} else if(strcmp(line, "%PGPSIG%") == 0) {
+				READ_AND_STORE(pkg->pgpsig.encdata);
 			} else if(strcmp(line, "%REPLACES%") == 0) {
 				READ_AND_STORE_ALL(pkg->replaces);
 			} else if(strcmp(line, "%DEPENDS%") == 0) {
@@ -429,7 +478,12 @@ static int sync_db_read(pmdb_t *db, struct archive *archive,
 			} else if(strcmp(line, "%PROVIDES%") == 0) {
 				READ_AND_STORE_ALL(pkg->provides);
 			} else if(strcmp(line, "%DELTAS%") == 0) {
-				READ_AND_STORE_ALL(pkg->deltas);
+				/* Different than the rest because of the _alpm_delta_parse call. */
+				while(1) {
+					READ_NEXT(line);
+					if(strlen(line) == 0) break;
+					pkg->deltas = alpm_list_add(pkg->deltas, _alpm_delta_parse(line));
+				}
 			}
 		}
 	} else if(strcmp(filename, "files") == 0) {
@@ -442,12 +496,12 @@ static int sync_db_read(pmdb_t *db, struct archive *archive,
 error:
 	FREE(pkgname);
 	/* TODO: return 0 always? */
-	return(0);
+	return 0;
 }
 
 static int sync_db_version(pmdb_t *db)
 {
-	return(2);
+	return 2;
 }
 
 struct db_operations sync_db_ops = {
@@ -480,7 +534,7 @@ pmdb_t *_alpm_db_register_sync(const char *treename)
 	db->ops = &sync_db_ops;
 
 	handle->dbs_sync = alpm_list_add(handle->dbs_sync, db);
-	return(db);
+	return db;
 }
 
 

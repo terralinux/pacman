@@ -50,7 +50,7 @@ pmhandle_t *_alpm_handle_new()
 
 	CALLOC(handle, 1, sizeof(pmhandle_t), RET_ERR(PM_ERR_MEMORY, NULL));
 
-	return(handle);
+	return handle;
 }
 
 void _alpm_handle_free(pmhandle_t *handle)
@@ -71,6 +71,11 @@ void _alpm_handle_free(pmhandle_t *handle)
 		closelog();
 	}
 
+#ifdef HAVE_LIBCURL
+	/* release curl handle */
+	curl_easy_cleanup(handle->curl);
+#endif
+
 	/* free memory */
 	_alpm_trans_free(handle->trans);
 	FREE(handle->root);
@@ -79,12 +84,14 @@ void _alpm_handle_free(pmhandle_t *handle)
 	FREE(handle->logfile);
 	FREE(handle->lockfile);
 	FREE(handle->arch);
+	FREE(handle->signaturedir);
 	FREELIST(handle->dbs_sync);
 	FREELIST(handle->noupgrade);
 	FREELIST(handle->noextract);
 	FREELIST(handle->ignorepkg);
 	FREELIST(handle->ignoregrp);
 	FREE(handle);
+
 }
 
 alpm_cb_log SYMEXPORT alpm_option_get_logcb()
@@ -166,6 +173,15 @@ const char SYMEXPORT *alpm_option_get_lockfile()
 		return NULL;
 	}
 	return handle->lockfile;
+}
+
+const char SYMEXPORT *alpm_option_get_signaturedir()
+{
+	if (handle == NULL) {
+		pm_errno = PM_ERR_HANDLE_NULL;
+		return NULL;
+	}
+	return handle->signaturedir;
 }
 
 int SYMEXPORT alpm_option_get_usesyslog()
@@ -304,18 +320,18 @@ int SYMEXPORT alpm_option_set_root(const char *root)
 
 	if(!root) {
 		pm_errno = PM_ERR_WRONG_ARGS;
-		return(-1);
+		return -1;
 	}
 	if(stat(root, &st) == -1 || !S_ISDIR(st.st_mode)) {
 		pm_errno = PM_ERR_NOT_A_DIR;
-		return(-1);
+		return -1;
 	}
 
 	realroot = calloc(PATH_MAX+1, sizeof(char));
 	if(!realpath(root, realroot)) {
 		FREE(realroot);
 		pm_errno = PM_ERR_NOT_A_DIR;
-		return(-1);
+		return -1;
 	}
 
 	/* verify root ends in a '/' */
@@ -331,7 +347,7 @@ int SYMEXPORT alpm_option_set_root(const char *root)
 	handle->root[rootlen-1] = '/';
 	FREE(realroot);
 	_alpm_log(PM_LOG_DEBUG, "option 'root' = %s\n", handle->root);
-	return(0);
+	return 0;
 }
 
 int SYMEXPORT alpm_option_set_dbpath(const char *dbpath)
@@ -344,11 +360,11 @@ int SYMEXPORT alpm_option_set_dbpath(const char *dbpath)
 
 	if(!dbpath) {
 		pm_errno = PM_ERR_WRONG_ARGS;
-		return(-1);
+		return -1;
 	}
 	if(stat(dbpath, &st) == -1 || !S_ISDIR(st.st_mode)) {
 		pm_errno = PM_ERR_NOT_A_DIR;
-		return(-1);
+		return -1;
 	}
 	/* verify dbpath ends in a '/' */
 	dbpathlen = strlen(dbpath);
@@ -370,7 +386,7 @@ int SYMEXPORT alpm_option_set_dbpath(const char *dbpath)
 	handle->lockfile = calloc(lockfilelen, sizeof(char));
 	snprintf(handle->lockfile, lockfilelen, "%s%s", handle->dbpath, lf);
 	_alpm_log(PM_LOG_DEBUG, "option 'lockfile' = %s\n", handle->lockfile);
-	return(0);
+	return 0;
 }
 
 int SYMEXPORT alpm_option_add_cachedir(const char *cachedir)
@@ -382,7 +398,7 @@ int SYMEXPORT alpm_option_add_cachedir(const char *cachedir)
 
 	if(!cachedir) {
 		pm_errno = PM_ERR_WRONG_ARGS;
-		return(-1);
+		return -1;
 	}
 	/* don't stat the cachedir yet, as it may not even be needed. we can
 	 * fail later if it is needed and the path is invalid. */
@@ -397,7 +413,7 @@ int SYMEXPORT alpm_option_add_cachedir(const char *cachedir)
 	newcachedir[cachedirlen-1] = '/';
 	handle->cachedirs = alpm_list_add(handle->cachedirs, newcachedir);
 	_alpm_log(PM_LOG_DEBUG, "option 'cachedir' = %s\n", newcachedir);
-	return(0);
+	return 0;
 }
 
 void SYMEXPORT alpm_option_set_cachedirs(alpm_list_t *cachedirs)
@@ -423,9 +439,9 @@ int SYMEXPORT alpm_option_remove_cachedir(const char *cachedir)
 	FREE(newcachedir);
 	if(vdata != NULL) {
 		FREE(vdata);
-		return(1);
+		return 1;
 	}
-	return(0);
+	return 0;
 }
 
 int SYMEXPORT alpm_option_set_logfile(const char *logfile)
@@ -436,7 +452,7 @@ int SYMEXPORT alpm_option_set_logfile(const char *logfile)
 
 	if(!logfile) {
 		pm_errno = PM_ERR_WRONG_ARGS;
-		return(-1);
+		return -1;
 	}
 
 	handle->logfile = strdup(logfile);
@@ -451,7 +467,25 @@ int SYMEXPORT alpm_option_set_logfile(const char *logfile)
 		handle->logstream = NULL;
 	}
 	_alpm_log(PM_LOG_DEBUG, "option 'logfile' = %s\n", handle->logfile);
-	return(0);
+	return 0;
+}
+
+int SYMEXPORT alpm_option_set_signaturedir(const char *signaturedir)
+{
+	ALPM_LOG_FUNC;
+
+	if(!signaturedir) {
+		pm_errno = PM_ERR_WRONG_ARGS;
+		return -1;
+	}
+
+	if(handle->signaturedir) {
+		FREE(handle->signaturedir);
+	}
+	handle->signaturedir = strdup(signaturedir);
+
+	_alpm_log(PM_LOG_DEBUG, "option 'signaturedir' = %s\n", handle->signaturedir);
+	return 0;
 }
 
 void SYMEXPORT alpm_option_set_usesyslog(int usesyslog)
@@ -476,9 +510,9 @@ int SYMEXPORT alpm_option_remove_noupgrade(const char *pkg)
 	handle->noupgrade = alpm_list_remove_str(handle->noupgrade, pkg, &vdata);
 	if(vdata != NULL) {
 		FREE(vdata);
-		return(1);
+		return 1;
 	}
-	return(0);
+	return 0;
 }
 
 void SYMEXPORT alpm_option_add_noextract(const char *pkg)
@@ -498,9 +532,9 @@ int SYMEXPORT alpm_option_remove_noextract(const char *pkg)
 	handle->noextract = alpm_list_remove_str(handle->noextract, pkg, &vdata);
 	if(vdata != NULL) {
 		FREE(vdata);
-		return(1);
+		return 1;
 	}
-	return(0);
+	return 0;
 }
 
 void SYMEXPORT alpm_option_add_ignorepkg(const char *pkg)
@@ -520,9 +554,9 @@ int SYMEXPORT alpm_option_remove_ignorepkg(const char *pkg)
 	handle->ignorepkg = alpm_list_remove_str(handle->ignorepkg, pkg, &vdata);
 	if(vdata != NULL) {
 		FREE(vdata);
-		return(1);
+		return 1;
 	}
-	return(0);
+	return 0;
 }
 
 void SYMEXPORT alpm_option_add_ignoregrp(const char *grp)
@@ -542,9 +576,9 @@ int SYMEXPORT alpm_option_remove_ignoregrp(const char *grp)
 	handle->ignoregrp = alpm_list_remove_str(handle->ignoregrp, grp, &vdata);
 	if(vdata != NULL) {
 		FREE(vdata);
-		return(1);
+		return 1;
 	}
-	return(0);
+	return 0;
 }
 
 void SYMEXPORT alpm_option_set_arch(const char *arch)

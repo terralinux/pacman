@@ -66,9 +66,9 @@ static int options_cmp(const void *p1, const void *p2)
 	const char *s1 = p1;
 	const char *s2 = p2;
 
-	if(s1 == s2) return(0);
-	if(!s1) return(-1);
-	if(!s2) return(1);
+	if(s1 == s2) return 0;
+	if(!s1) return -1;
+	if(!s2) return 1;
 	/* First skip all spaces in both strings */
 	while(isspace((unsigned char)*s1)) {
 		s1++;
@@ -87,15 +87,15 @@ static int options_cmp(const void *p1, const void *p2)
 			s2++;
 		} else if(*s2 == '-') {
 			/* s1 short, s2 long */
-			return(-1);
+			return -1;
 		} else if(*s1 == '-') {
 			/* s1 long, s2 short */
-			return(1);
+			return 1;
 		}
 		/* two short -> strcmp */
 	}
 
-	return(strcmp(s1, s2));
+	return strcmp(s1, s2);
 }
 
 /** Display usage/syntax for the specified operation.
@@ -114,6 +114,7 @@ static void usage(int op, const char * const myname)
 	char const * const str_usg = _("usage");
 	char const * const str_opr = _("operation");
 
+	/* please limit your strings to 80 characters in width */
 	if(op == PM_OP_MAIN) {
 		printf("%s:  %s <%s> [...]\n", str_usg, myname, str_opr);
 		printf(_("operations:\n"));
@@ -123,6 +124,7 @@ static void usage(int op, const char * const myname)
 		printf("    %s {-Q --query}    [%s] [%s]\n", myname, str_opt, str_pkg);
 		printf("    %s {-R --remove}   [%s] <%s>\n", myname, str_opt, str_pkg);
 		printf("    %s {-S --sync}     [%s] [%s]\n", myname, str_opt, str_pkg);
+		printf("    %s {-T --deptest}  [%s] [%s]\n", myname, str_opt, str_pkg);
 		printf("    %s {-U --upgrade}  [%s] <%s>\n", myname, str_opt, str_file);
 		printf(_("\nuse '%s {-h --help}' with an operation for available options\n"),
 				myname);
@@ -131,10 +133,10 @@ static void usage(int op, const char * const myname)
 			printf("%s:  %s {-R --remove} [%s] <%s>\n", str_usg, myname, str_opt, str_pkg);
 			printf("%s:\n", str_opt);
 			addlist(_("  -c, --cascade        remove packages and all packages that depend on them\n"));
-			addlist(_("  -n, --nosave         remove configuration files as well\n"));
-			addlist(_("  -s, --recursive      remove dependencies also (that won't break packages)\n"
-				 "                       (-ss includes explicitly installed dependencies too)\n"));
-			addlist(_("  -u, --unneeded       remove unneeded packages (that won't break packages)\n"));
+			addlist(_("  -n, --nosave         remove configuration files\n"));
+			addlist(_("  -s, --recursive      remove unnecessary dependencies\n"
+			          "                       (-ss includes explicitly installed dependencies)\n"));
+			addlist(_("  -u, --unneeded       remove unneeded packages\n"));
 		} else if(op == PM_OP_UPGRADE) {
 			printf("%s:  %s {-U --upgrade} [%s] <%s>\n", str_usg, myname, str_opt, str_file);
 			printf("%s:\n", str_opt);
@@ -173,6 +175,9 @@ static void usage(int op, const char * const myname)
 			printf("%s:\n", str_opt);
 			addlist(_("      --asdeps         mark packages as non-explicitly installed\n"));
 			addlist(_("      --asexplicit     mark packages as explicitly installed\n"));
+		} else if(op == PM_OP_DEPTEST) {
+			printf("%s:  %s {-T --deptest} [%s] [%s]\n", str_usg, myname, str_opt, str_pkg);
+			printf("%s:\n", str_opt);
 		}
 		switch(op) {
 			case PM_OP_SYNC:
@@ -182,16 +187,16 @@ static void usage(int op, const char * const myname)
 				addlist(_("      --asexplicit     install packages as explicitly installed\n"));
 				addlist(_("      --ignore <pkg>   ignore a package upgrade (can be used more than once)\n"));
 				addlist(_("      --ignoregroup <grp>\n"
-				         "                       ignore a group upgrade (can be used more than once)\n"));
+				          "                       ignore a group upgrade (can be used more than once)\n"));
 				/* pass through */
 			case PM_OP_REMOVE:
-				addlist(_("  -d, --nodeps         skip dependency checks\n"));
+				addlist(_("  -d, --nodeps         skip dependency version checks (-dd to skip all checks)\n"));
 				addlist(_("  -k, --dbonly         only modify database entries, not package files\n"));
 				addlist(_("      --noprogressbar  do not show a progress bar when downloading files\n"));
 				addlist(_("      --noscriptlet    do not execute the install scriptlet if one exists\n"));
-				addlist(_("      --print          only print the targets instead of performing the operation\n"));
+				addlist(_("      --print          print the targets instead of performing the operation\n"));
 				addlist(_("      --print-format <string>\n"
-				         "                       specify how the targets should be printed\n"));
+				          "                       specify how the targets should be printed\n"));
 				break;
 		}
 
@@ -202,6 +207,7 @@ static void usage(int op, const char * const myname)
 		addlist(_("      --cachedir <dir> set an alternate package cache location\n"));
 		addlist(_("      --config <path>  set an alternate configuration file\n"));
 		addlist(_("      --debug          display debug messages\n"));
+		addlist(_("      --gpgdir <path>  set an alternate home directory for GnuPG\n"));
 		addlist(_("      --logfile <path> set an alternate log file\n"));
 		addlist(_("      --noconfirm      do not ask for any confirmation\n"));
 	}
@@ -297,7 +303,7 @@ static ssize_t xwrite(int fd, const void *buf, size_t count)
 	do {
 		ret = write(fd, buf, count);
 	} while(ret == -1 && errno == EINTR);
-	return(ret);
+	return ret;
 }
 
 /** Catches thrown signals. Performs necessary cleanup to ensure database is
@@ -385,6 +391,17 @@ static void setlibpaths(void)
 			}
 		}
 
+		/* Set GnuPG's home directory.  This is not relative to rootdir, even if
+		 * rootdir is defined. Reasoning: gpgdir contains configuration data. */
+		if(config->gpgdir) {
+			ret = alpm_option_set_signaturedir(config->gpgdir);
+			if(ret != 0) {
+				pm_printf(PM_LOG_ERROR, _("problem setting gpgdir '%s' (%s)\n"),
+						config->gpgdir, alpm_strerrorlast());
+				cleanup(ret);
+			}
+		}
+
 		/* add a default cachedir if one wasn't specified */
 		if(alpm_option_get_cachedirs() == NULL) {
 			alpm_option_add_cachedir(CACHEDIR);
@@ -393,7 +410,7 @@ static void setlibpaths(void)
 	}
 }
 
-#define check_optarg() if(!optarg) { return(1); }
+#define check_optarg() if(!optarg) { return 1; }
 
 typedef void (*fn_add) (const char *s);
 
@@ -407,7 +424,7 @@ static int parsearg_util_addlist(fn_add fn)
 		fn((char *)alpm_list_getdata(item));
 	}
 	FREELIST(list);
-	return(0);
+	return 0;
 }
 
 /** Helper function for parsing operation from command-line arguments.
@@ -444,9 +461,9 @@ static int parsearg_op(int opt, int dryrun)
 			if(dryrun) break;
 			config->help = 1; break;
 		default:
-			return(1);
+			return 1;
 	}
-	return(0);
+	return 0;
 }
 
 /** Helper functions for parsing command-line arguments.
@@ -467,7 +484,7 @@ static int parsearg_global(int opt)
 			if(alpm_option_add_cachedir(optarg) != 0) {
 				pm_printf(PM_LOG_ERROR, _("problem adding cachedir '%s' (%s)\n"),
 						optarg, alpm_strerrorlast());
-				return(1);
+				return 1;
 			}
 			break;
 		case OP_CONFIG:
@@ -492,13 +509,16 @@ static int parsearg_global(int opt)
 					default:
 						pm_printf(PM_LOG_ERROR, _("'%s' is not a valid debug level\n"),
 								optarg);
-						return(1);
+						return 1;
 				}
 			} else {
 				config->logmask |= PM_LOG_DEBUG;
 			}
 			/* progress bars get wonky with debug on, shut them off */
 			config->noprogressbar = 1;
+			break;
+		case OP_GPGDIR:
+			config->gpgdir = strdup(optarg);
 			break;
 		case OP_LOGFILE:
 			check_optarg();
@@ -511,9 +531,9 @@ static int parsearg_global(int opt)
 			break;
 		case 'r': check_optarg(); config->rootdir = strdup(optarg); break;
 		case 'v': (config->verbose)++; break;
-		default: return(1);
+		default: return 1;
 	}
-	return(0);
+	return 0;
 }
 
 static int parsearg_database(int opt)
@@ -521,9 +541,9 @@ static int parsearg_database(int opt)
 	switch(opt) {
 		case OP_ASDEPS: config->flags |= PM_TRANS_FLAG_ALLDEPS; break;
 		case OP_ASEXPLICIT: config->flags |= PM_TRANS_FLAG_ALLEXPLICIT; break;
-		default: return(1);
+		default: return 1;
 	}
-	return(0);
+	return 0;
 }
 
 static int parsearg_query(int opt)
@@ -543,9 +563,9 @@ static int parsearg_query(int opt)
 		case 's': config->op_q_search = 1; break;
 		case 't': config->op_q_unrequired = 1; break;
 		case 'u': config->op_q_upgrade = 1; break;
-		default: return(1);
+		default: return 1;
 	}
-	return(0);
+	return 0;
 }
 
 /* options common to -S -R -U */
@@ -567,15 +587,15 @@ static int parsearg_trans(int opt)
 			check_optarg();
 			config->print_format = strdup(optarg);
 			break;
-		default: return(1);
+		default: return 1;
 	}
-	return(0);
+	return 0;
 }
 
 static int parsearg_remove(int opt)
 {
 	if (parsearg_trans(opt) == 0)
-		return(0);
+		return 0;
 	switch(opt) {
 		case 'c': config->flags |= PM_TRANS_FLAG_CASCADE; break;
 		case 'n': config->flags |= PM_TRANS_FLAG_NOSAVE; break;
@@ -587,16 +607,16 @@ static int parsearg_remove(int opt)
 			}
 			break;
 		case 'u': config->flags |= PM_TRANS_FLAG_UNNEEDED; break;
-		default: return(1);
+		default: return 1;
 	}
-	return(0);
+	return 0;
 }
 
 /* options common to -S -U */
 static int parsearg_upgrade(int opt)
 {
 	if (parsearg_trans(opt) == 0)
-		return(0);
+		return 0;
 	switch(opt) {
 		case 'f': config->flags |= PM_TRANS_FLAG_FORCE; break;
 		case OP_ASDEPS: config->flags |= PM_TRANS_FLAG_ALLDEPS; break;
@@ -607,15 +627,15 @@ static int parsearg_upgrade(int opt)
 		case OP_IGNOREGROUP:
 			parsearg_util_addlist(alpm_option_add_ignoregrp);
 			break;
-		default: return(1);
+		default: return 1;
 	}
-	return(0);
+	return 0;
 }
 
 static int parsearg_sync(int opt)
 {
 	if (parsearg_upgrade(opt) == 0)
-		return(0);
+		return 0;
 	switch(opt) {
 		case OP_NEEDED: config->flags |= PM_TRANS_FLAG_NEEDED; break;
 		case 'c': (config->op_s_clean)++; break;
@@ -631,9 +651,9 @@ static int parsearg_sync(int opt)
 			config->flags |= PM_TRANS_FLAG_NOCONFLICTS;
 			break;
 		case 'y': (config->op_s_sync)++; break;
-		default: return(1);
+		default: return 1;
 	}
-	return(0);
+	return 0;
 }
 
 /** Parse command-line arguments for each operation.
@@ -701,6 +721,7 @@ static int parseargs(int argc, char *argv[])
 		{"asexplicit",     no_argument,   0, OP_ASEXPLICIT},
 		{"arch",       required_argument, 0, OP_ARCH},
 		{"print-format", required_argument, 0, OP_PRINTFORMAT},
+		{"gpgdir",     required_argument, 0, OP_GPGDIR},
 		{0, 0, 0, 0}
 	};
 
@@ -712,22 +733,22 @@ static int parseargs(int argc, char *argv[])
 			continue;
 		} else if(opt == '?') {
 			/* unknown option, getopt printed an error */
-			return(1);
+			return 1;
 		}
 		parsearg_op(opt, 0);
 	}
 
 	if(config->op == 0) {
 		pm_printf(PM_LOG_ERROR, _("only one operation may be used at a time\n"));
-		return(1);
+		return 1;
 	}
 	if(config->help) {
 		usage(config->op, mbasename(argv[0]));
-		return(2);
+		return 2;
 	}
 	if(config->version) {
 		version();
-		return(2);
+		return 2;
 	}
 
 	/* parse all other options */
@@ -739,8 +760,9 @@ static int parseargs(int argc, char *argv[])
 			continue;
 		} else if(opt == '?') {
 			/* this should have failed during first pass already */
-			return(1);
-		} else if(parsearg_op(opt, 1) == 0) {	/* opt is an operation */
+			return 1;
+		} else if(parsearg_op(opt, 1) == 0) {
+			/* opt is an operation */
 			continue;
 		}
 
@@ -757,25 +779,24 @@ static int parseargs(int argc, char *argv[])
 			case PM_OP_SYNC:
 				result = parsearg_sync(opt);
 				break;
-			case PM_OP_DEPTEST:
-				result = 1;
-				break;
 			case PM_OP_UPGRADE:
 				result = parsearg_upgrade(opt);
 				break;
+			case PM_OP_DEPTEST:
 			default:
-				pm_printf(PM_LOG_ERROR, _("no operation specified (use -h for help)\n"));
-				return(1);
+				result = 1;
+				break;
 		}
-		if (result == 0)
+		if (result == 0) {
 			continue;
+		}
 
 		/* fall back to global options */
 		result = parsearg_global(opt);
 		if(result != 0) {
 			/* global option parsing failed, abort */
 			pm_printf(PM_LOG_ERROR, _("invalid option\n"));
-			return(result);
+			return result;
 		}
 	}
 
@@ -785,7 +806,7 @@ static int parseargs(int argc, char *argv[])
 		optind++;
 	}
 
-	return(0);
+	return 0;
 }
 
 /* helper for being used with setrepeatingoption */
@@ -817,21 +838,20 @@ static void option_add_cleanmethod(const char *value) {
  * @param option the string (friendly) name of the option, used for messages
  * @param optionfunc a function pointer to an alpm_option_add_* function
  */
-static void setrepeatingoption(const char *ptr, const char *option,
+static void setrepeatingoption(char *ptr, const char *option,
 		void (*optionfunc)(const char*))
 {
-	char *p = (char*)ptr;
 	char *q;
 
-	while((q = strchr(p, ' '))) {
+	while((q = strchr(ptr, ' '))) {
 		*q = '\0';
-		(*optionfunc)(p);
-		pm_printf(PM_LOG_DEBUG, "config: %s: %s\n", option, p);
-		p = q;
-		p++;
+		(*optionfunc)(ptr);
+		pm_printf(PM_LOG_DEBUG, "config: %s: %s\n", option, ptr);
+		ptr = q;
+		ptr++;
 	}
-	(*optionfunc)(p);
-	pm_printf(PM_LOG_DEBUG, "config: %s: %s\n", option, p);
+	(*optionfunc)(ptr);
+	pm_printf(PM_LOG_DEBUG, "config: %s: %s\n", option, ptr);
 }
 
 static char *get_filename(const char *url) {
@@ -839,7 +859,7 @@ static char *get_filename(const char *url) {
 	if(filename != NULL) {
 		filename++;
 	}
-	return(filename);
+	return filename;
 }
 
 static char *get_destfile(const char *path, const char *filename) {
@@ -849,7 +869,7 @@ static char *get_destfile(const char *path, const char *filename) {
 	destfile = calloc(len, sizeof(char));
 	snprintf(destfile, len, "%s%s", path, filename);
 
-	return(destfile);
+	return destfile;
 }
 
 static char *get_tempfile(const char *path, const char *filename) {
@@ -859,7 +879,7 @@ static char *get_tempfile(const char *path, const char *filename) {
 	tempfile = calloc(len, sizeof(char));
 	snprintf(tempfile, len, "%s%s.part", path, filename);
 
-	return(tempfile);
+	return tempfile;
 }
 
 /** External fetch callback */
@@ -951,10 +971,11 @@ cleanup:
 	free(tempfile);
 	free(parsedcmd);
 
-	return(ret);
+	return ret;
 }
 
-static int _parse_options(char *key, char *value)
+static int _parse_options(const char *key, char *value,
+		const char *file, int linenum)
 {
 	if(value == NULL) {
 		/* options without settings */
@@ -976,8 +997,9 @@ static int _parse_options(char *key, char *value)
 		} else if(strcmp(key, "CheckSpace") == 0) {
 			alpm_option_set_checkspace(1);
 		} else {
-			pm_printf(PM_LOG_ERROR, _("directive '%s' without value not recognized\n"), key);
-			return(1);
+			pm_printf(PM_LOG_WARNING,
+					_("config file %s, line %d: directive '%s' in section '%s' not recognized.\n"),
+					file, linenum, key, "options");
 		}
 	} else {
 		/* options with settings */
@@ -1007,7 +1029,7 @@ static int _parse_options(char *key, char *value)
 			if(alpm_option_add_cachedir(value) != 0) {
 				pm_printf(PM_LOG_ERROR, _("problem adding cachedir '%s' (%s)\n"),
 						value, alpm_strerrorlast());
-				return(1);
+				return 1;
 			}
 			pm_printf(PM_LOG_DEBUG, "config: cachedir: %s\n", value);
 		} else if(strcmp(key, "RootDir") == 0) {
@@ -1015,6 +1037,11 @@ static int _parse_options(char *key, char *value)
 			if(!config->rootdir) {
 				config->rootdir = strdup(value);
 				pm_printf(PM_LOG_DEBUG, "config: rootdir: %s\n", value);
+			}
+		} else if (strcmp(key, "GPGDir") == 0) {
+			if(!config->gpgdir) {
+				config->gpgdir = strdup(value);
+				pm_printf(PM_LOG_DEBUG, "config: gpgdir: %s\n", value);
 			}
 		} else if (strcmp(key, "LogFile") == 0) {
 			if(!config->logfile) {
@@ -1028,12 +1055,14 @@ static int _parse_options(char *key, char *value)
 		} else if (strcmp(key, "CleanMethod") == 0) {
 			setrepeatingoption(value, "CleanMethod", option_add_cleanmethod);
 		} else {
-			pm_printf(PM_LOG_ERROR, _("directive '%s' with a value not recognized\n"), key);
-			return(1);
+
+			pm_printf(PM_LOG_WARNING,
+					_("config file %s, line %d: directive '%s' in section '%s' not recognized.\n"),
+					file, linenum, key, "options");
 		}
 
 	}
-	return(0);
+	return 0;
 }
 
 static int _add_mirror(pmdb_t *db, char *value)
@@ -1052,7 +1081,7 @@ static int _add_mirror(pmdb_t *db, char *value)
 			free(temp);
 			pm_printf(PM_LOG_ERROR, _("The mirror '%s' contains the $arch"
 						" variable, but no Architecture is defined.\n"), value);
-			return(1);
+			return 1;
 		}
 		server = temp;
 	}
@@ -1062,11 +1091,11 @@ static int _add_mirror(pmdb_t *db, char *value)
 		pm_printf(PM_LOG_ERROR, _("could not add server URL to database '%s': %s (%s)\n"),
 				dbname, server, alpm_strerrorlast());
 		free(server);
-		return(1);
+		return 1;
 	}
 
 	free(server);
-	return(0);
+	return 0;
 }
 
 /* The real parseconfig. Called with a null section argument by the publicly
@@ -1085,7 +1114,7 @@ static int _parseconfig(const char *file, const char *givensection,
 	fp = fopen(file, "r");
 	if(fp == NULL) {
 		pm_printf(PM_LOG_ERROR, _("config file %s could not be read.\n"), file);
-		return(1);
+		return 1;
 	}
 
 	/* if we are passed a section, use it as our starting point */
@@ -1163,7 +1192,7 @@ static int _parseconfig(const char *file, const char *givensection,
 		/* Include is allowed in both options and repo sections */
 		if(strcmp(key, "Include") == 0) {
 			if(value == NULL) {
-				pm_printf(PM_LOG_ERROR, _("config file %s, line %d: directive %s needs a value\n"),
+				pm_printf(PM_LOG_ERROR, _("config file %s, line %d: directive '%s' needs a value\n"),
 						file, linenum, key);
 				ret = 1;
 				goto cleanup;
@@ -1175,12 +1204,12 @@ static int _parseconfig(const char *file, const char *givensection,
 			switch(globret) {
 				case GLOB_NOSPACE:
 					pm_printf(PM_LOG_DEBUG,
-							"config file %s, line %d: include globing out of space\n",
+							"config file %s, line %d: include globbing out of space\n",
 							file, linenum);
 				break;
 				case GLOB_ABORTED:
 					pm_printf(PM_LOG_DEBUG,
-							"config file %s, line %d: include globing read error for %s\n",
+							"config file %s, line %d: include globbing read error for %s\n",
 							file, linenum, value);
 				break;
 				case GLOB_NOMATCH:
@@ -1201,18 +1230,14 @@ static int _parseconfig(const char *file, const char *givensection,
 		}
 		if(strcmp(section, "options") == 0) {
 			/* we are either in options ... */
-			if((ret = _parse_options(key, value)) != 0) {
-				pm_printf(PM_LOG_ERROR, _("config file %s, line %d: problem in options section\n"),
-						file, linenum);
-				ret = 1;
+			if((ret = _parse_options(key, value, file, linenum)) != 0) {
 				goto cleanup;
 			}
-			continue;
 		} else {
 			/* ... or in a repo section */
 			if(strcmp(key, "Server") == 0) {
 				if(value == NULL) {
-					pm_printf(PM_LOG_ERROR, _("config file %s, line %d: directive %s needs a value\n"),
+					pm_printf(PM_LOG_ERROR, _("config file %s, line %d: directive '%s' needs a value\n"),
 							file, linenum, key);
 					ret = 1;
 					goto cleanup;
@@ -1221,27 +1246,42 @@ static int _parseconfig(const char *file, const char *givensection,
 					ret = 1;
 					goto cleanup;
 				}
+			} else if(strcmp(key, "VerifySig") == 0) {
+				if (strcmp(value, "Always") == 0) {
+					ret = alpm_db_set_pgp_verify(db,PM_PGP_VERIFY_ALWAYS);
+				} else if (strcmp(value, "Optional") == 0) {
+					ret = alpm_db_set_pgp_verify(db,PM_PGP_VERIFY_OPTIONAL);
+				} else if (strcmp(value, "Never") == 0) {
+					ret = alpm_db_set_pgp_verify(db,PM_PGP_VERIFY_NEVER);
+				} else {
+					pm_printf(PM_LOG_ERROR, _("invalid value for 'VerifySig' : '%s'\n"), value);
+					ret = 1;
+					goto cleanup;
+				}
+				if (ret != 0) {
+					pm_printf(PM_LOG_ERROR, _("could not add pgp verify option to database '%s': %s (%s)\n"),
+							alpm_db_get_name(db), value, alpm_strerrorlast());
+					goto cleanup;
+				}
+				pm_printf(PM_LOG_DEBUG, "config: VerifySig for %s: %s\n",alpm_db_get_name(db), value);
 			} else {
-				pm_printf(PM_LOG_ERROR, _("config file %s, line %d: directive '%s' in repository section '%s' not recognized.\n"),
+				pm_printf(PM_LOG_WARNING,
+						_("config file %s, line %d: directive '%s' in section '%s' not recognized.\n"),
 						file, linenum, key, section);
-				ret = 1;
-				goto cleanup;
 			}
 		}
 
 	}
 
 cleanup:
-	if(fp) {
-		fclose(fp);
-	}
+	fclose(fp);
 	if(section){
 		free(section);
 	}
 	/* call setlibpaths here to ensure we have called it at least once */
 	setlibpaths();
 	pm_printf(PM_LOG_DEBUG, "config: finished parsing %s\n", file);
-	return(ret);
+	return ret;
 }
 
 /** Parse a configuration file.
@@ -1251,7 +1291,7 @@ cleanup:
 static int parseconfig(const char *file)
 {
 	/* call the real parseconfig function with a null section & db argument */
-	return(_parseconfig(file, NULL, NULL));
+	return _parseconfig(file, NULL, NULL);
 }
 
 /** print commandline to logfile
@@ -1344,6 +1384,7 @@ int main(int argc, char *argv[])
 	/* define paths to reasonable defaults */
 	alpm_option_set_root(ROOTDIR);
 	alpm_option_set_dbpath(DBPATH);
+	alpm_option_set_signaturedir(GPGDIR);
 	alpm_option_set_logfile(LOGFILE);
 
 	/* Priority of options:
@@ -1361,10 +1402,14 @@ int main(int argc, char *argv[])
 		cleanup(ret);
 	}
 
-	/* we also support reading targets from stdin */
-	if(!isatty(fileno(stdin))) {
+	/* we support reading targets from stdin if a cmdline parameter is '-' */
+	if(!isatty(fileno(stdin)) && alpm_list_find_str(pm_targets, "-")) {
 		char line[PATH_MAX];
 		int i = 0;
+
+		/* remove the '-' from the list */
+		pm_targets = alpm_list_remove_str(pm_targets, "-", NULL);
+
 		while(i < PATH_MAX && (line[i] = (char)fgetc(stdin)) != EOF) {
 			if(isspace((unsigned char)line[i])) {
 				/* avoid adding zero length arg when multiple spaces separate args */
@@ -1474,7 +1519,7 @@ int main(int argc, char *argv[])
 
 	cleanup(ret);
 	/* not reached */
-	return(EXIT_SUCCESS);
+	return EXIT_SUCCESS;
 }
 
 /* vim: set ts=2 sw=2 noet: */

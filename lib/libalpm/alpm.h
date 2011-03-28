@@ -45,6 +45,7 @@ extern "C" {
 
 typedef struct __pmdb_t pmdb_t;
 typedef struct __pmpkg_t pmpkg_t;
+typedef struct __pmpgpsig_t pmpgpsig_t;
 typedef struct __pmdelta_t pmdelta_t;
 typedef struct __pmgrp_t pmgrp_t;
 typedef struct __pmtrans_t pmtrans_t;
@@ -125,6 +126,9 @@ int alpm_option_set_logfile(const char *logfile);
 
 const char *alpm_option_get_lockfile(void);
 /* no set_lockfile, path is determined from dbpath */
+
+const char *alpm_option_get_signaturedir(void);
+int alpm_option_set_signaturedir(const char *signaturedir);
 
 int alpm_option_get_usesyslog(void);
 void alpm_option_set_usesyslog(int usesyslog);
@@ -215,6 +219,7 @@ time_t alpm_pkg_get_builddate(pmpkg_t *pkg);
 time_t alpm_pkg_get_installdate(pmpkg_t *pkg);
 const char *alpm_pkg_get_packager(pmpkg_t *pkg);
 const char *alpm_pkg_get_md5sum(pmpkg_t *pkg);
+const pmpgpsig_t *alpm_pkg_get_pgpsig(pmpkg_t *pkg);
 const char *alpm_pkg_get_arch(pmpkg_t *pkg);
 off_t alpm_pkg_get_size(pmpkg_t *pkg);
 off_t alpm_pkg_get_isize(pmpkg_t *pkg);
@@ -239,6 +244,22 @@ int alpm_pkg_has_scriptlet(pmpkg_t *pkg);
 
 off_t alpm_pkg_download_size(pmpkg_t *newpkg);
 alpm_list_t *alpm_pkg_unused_deltas(pmpkg_t *pkg);
+
+/*
+ * Signatures
+ */
+
+int alpm_pkg_check_pgp_signature(pmpkg_t *pkg);
+int alpm_db_check_pgp_signature(pmdb_t *db);
+
+/* GPG signature verification option */
+typedef enum _pgp_verify_t {
+	PM_PGP_VERIFY_ALWAYS,
+	PM_PGP_VERIFY_OPTIONAL,
+	PM_PGP_VERIFY_NEVER
+} pgp_verify_t;
+
+int alpm_db_set_pgp_verify(pmdb_t *db, pgp_verify_t verify);
 
 /*
  * Deltas
@@ -521,6 +542,10 @@ enum _pmerrno_t {
 	PM_ERR_PKG_INVALID_NAME,
 	PM_ERR_PKG_INVALID_ARCH,
 	PM_ERR_PKG_REPO_NOT_FOUND,
+	/* Signatures */
+	PM_ERR_SIG_MISSINGDIR,
+	PM_ERR_SIG_INVALID,
+	PM_ERR_SIG_UNKNOWN,
 	/* Deltas */
 	PM_ERR_DLT_INVALID,
 	PM_ERR_DLT_PATCHFAILED,
@@ -534,8 +559,9 @@ enum _pmerrno_t {
 	PM_ERR_INVALID_REGEX,
 	/* External library errors */
 	PM_ERR_LIBARCHIVE,
-	PM_ERR_LIBFETCH,
-	PM_ERR_EXTERNAL_DOWNLOAD
+	PM_ERR_LIBCURL,
+	PM_ERR_EXTERNAL_DOWNLOAD,
+	PM_ERR_GPGME
 };
 
 extern enum _pmerrno_t pm_errno;

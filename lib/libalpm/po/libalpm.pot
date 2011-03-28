@@ -6,9 +6,9 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: pacman 3.4.3\n"
+"Project-Id-Version: pacman 3.5.1\n"
 "Report-Msgid-Bugs-To: http://bugs.archlinux.org/index.php?project=3\n"
-"POT-Creation-Date: 2011-03-01 18:15-0600\n"
+"POT-Creation-Date: 2011-03-20 23:42-0500\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -184,11 +184,15 @@ msgid "could not get filesystem information for %s: %s\n"
 msgstr ""
 
 #, c-format
-msgid "could not determine mount point for file %s"
+msgid "could not determine mount point for file %s\n"
 msgstr ""
 
 #, c-format
-msgid "could not determine filesystem mount points"
+msgid "could not determine filesystem mount points\n"
+msgstr ""
+
+#, c-format
+msgid "could not determine root mount point %s\n"
 msgstr ""
 
 #, c-format

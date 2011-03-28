@@ -40,6 +40,7 @@
 #include "delta.h"
 #include "handle.h"
 #include "deps.h"
+#include "base64.h"
 
 /** \addtogroup alpm_packages Package Functions
  * @brief Functions to manipulate libalpm packages
@@ -61,7 +62,7 @@ int SYMEXPORT alpm_pkg_free(pmpkg_t *pkg)
 		_alpm_pkg_free(pkg);
 	}
 
-	return(0);
+	return 0;
 }
 
 /** Check the integrity (with md5) of a package from the sync cache.
@@ -84,13 +85,13 @@ int SYMEXPORT alpm_pkg_checkmd5sum(pmpkg_t *pkg)
 	retval = _alpm_test_md5sum(fpath, alpm_pkg_get_md5sum(pkg));
 
 	if(retval == 0) {
-		return(0);
+		return 0;
 	} else if (retval == 1) {
 		pm_errno = PM_ERR_PKG_INVALID;
 		retval = -1;
 	}
 
-	return(retval);
+	return retval;
 }
 
 /* Default package accessor functions. These will get overridden by any
@@ -201,6 +202,42 @@ const char SYMEXPORT *alpm_pkg_get_md5sum(pmpkg_t *pkg)
 	return pkg->ops->get_md5sum(pkg);
 }
 
+static int decode_pgpsig(pmpkg_t *pkg) {
+	int len = strlen(pkg->pgpsig.encdata);
+	const unsigned char *usline = (const unsigned char*)pkg->pgpsig.encdata;
+	int destlen = 0;
+	/* get the necessary size for the buffer by passing 0 */
+	int ret = base64_decode(NULL, &destlen, usline, len);
+	/* alloc our memory and repeat the call to decode */
+	MALLOC(pkg->pgpsig.rawdata, (size_t)destlen, goto error);
+	ret = base64_decode(pkg->pgpsig.rawdata, &destlen, usline, len);
+	pkg->pgpsig.rawlen = destlen;
+	if(ret != 0) {
+		goto error;
+	}
+
+	FREE(pkg->pgpsig.encdata);
+	return 0;
+
+error:
+	FREE(pkg->pgpsig.rawdata);
+	pkg->pgpsig.rawlen = 0;
+	return 1;
+}
+
+const pmpgpsig_t SYMEXPORT *alpm_pkg_get_pgpsig(pmpkg_t *pkg)
+{
+	ALPM_LOG_FUNC;
+
+	/* Sanity checks */
+	ASSERT(pkg != NULL, RET_ERR(PM_ERR_WRONG_ARGS, NULL));
+
+	if(pkg->pgpsig.rawdata == NULL && pkg->pgpsig.encdata != NULL) {
+		decode_pgpsig(pkg);
+	}
+	return &(pkg->pgpsig);
+}
+
 const char SYMEXPORT *alpm_pkg_get_arch(pmpkg_t *pkg)
 {
 	return pkg->ops->get_arch(pkg);
@@ -274,10 +311,10 @@ alpm_list_t SYMEXPORT *alpm_pkg_get_backup(pmpkg_t *pkg)
 pmdb_t SYMEXPORT *alpm_pkg_get_db(pmpkg_t *pkg)
 {
 	/* Sanity checks */
-	ASSERT(pkg != NULL, return(NULL));
-	ASSERT(pkg->origin != PKG_FROM_FILE, return(NULL));
+	ASSERT(pkg != NULL, return NULL);
+	ASSERT(pkg->origin != PKG_FROM_FILE, return NULL);
 
-	return(pkg->origin_data.db);
+	return pkg->origin_data.db;
 }
 
 /**
@@ -339,14 +376,14 @@ static void find_requiredby(pmpkg_t *pkg, pmdb_t *db, alpm_list_t **reqs)
 {
 	const alpm_list_t *i;
 	for(i = _alpm_db_get_pkgcache(db); i; i = i->next) {
-		if(!i->data) {
-			continue;
-		}
 		pmpkg_t *cachepkg = i->data;
-		if(_alpm_dep_edge(cachepkg, pkg)) {
-			const char *cachepkgname = cachepkg->name;
-			if(alpm_list_find_str(*reqs, cachepkgname) == 0) {
-				*reqs = alpm_list_add(*reqs, strdup(cachepkgname));
+		alpm_list_t *i;
+		for(i = alpm_pkg_get_depends(cachepkg); i; i = i->next) {
+			if(_alpm_depcmp(pkg, i->data)) {
+				const char *cachepkgname = cachepkg->name;
+				if(alpm_list_find_str(*reqs, cachepkgname) == NULL) {
+					*reqs = alpm_list_add(*reqs, strdup(cachepkgname));
+				}
 			}
 		}
 	}
@@ -377,11 +414,11 @@ alpm_list_t SYMEXPORT *alpm_pkg_compute_requiredby(pmpkg_t *pkg)
 			for(i = handle->dbs_sync; i; i = i->next) {
 				db = i->data;
 				find_requiredby(pkg, db, &reqs);
-				reqs = alpm_list_msort(reqs, alpm_list_count(reqs), _alpm_str_cmp);
 			}
+			reqs = alpm_list_msort(reqs, alpm_list_count(reqs), _alpm_str_cmp);
 		}
 	}
-	return(reqs);
+	return reqs;
 }
 
 /** @} */
@@ -394,7 +431,7 @@ pmpkg_t *_alpm_pkg_new(void)
 
 	CALLOC(pkg, 1, sizeof(pmpkg_t), RET_ERR(PM_ERR_MEMORY, NULL));
 
-	return(pkg);
+	return pkg;
 }
 
 pmpkg_t *_alpm_pkg_dup(pmpkg_t *pkg)
@@ -445,7 +482,7 @@ pmpkg_t *_alpm_pkg_dup(pmpkg_t *pkg)
 	}
 	newpkg->infolevel = pkg->infolevel;
 
-	return(newpkg);
+	return newpkg;
 }
 
 void _alpm_pkg_free(pmpkg_t *pkg)
@@ -463,6 +500,8 @@ void _alpm_pkg_free(pmpkg_t *pkg)
 	FREE(pkg->url);
 	FREE(pkg->packager);
 	FREE(pkg->md5sum);
+	FREE(pkg->pgpsig.encdata);
+	FREE(pkg->pgpsig.rawdata);
 	FREE(pkg->arch);
 	FREELIST(pkg->licenses);
 	FREELIST(pkg->replaces);
@@ -522,7 +561,7 @@ int _alpm_pkg_cmp(const void *p1, const void *p2)
 {
 	pmpkg_t *pkg1 = (pmpkg_t *)p1;
 	pmpkg_t *pkg2 = (pmpkg_t *)p2;
-	return(strcoll(pkg1->name, pkg2->name));
+	return strcoll(pkg1->name, pkg2->name);
 }
 
 /* Test for existence of a package in a alpm_list_t*
@@ -536,7 +575,7 @@ pmpkg_t *_alpm_pkg_find(alpm_list_t *haystack, const char *needle)
 	ALPM_LOG_FUNC;
 
 	if(needle == NULL || haystack == NULL) {
-		return(NULL);
+		return NULL;
 	}
 
 	needle_hash = _alpm_hash_sdbm(needle);
@@ -552,11 +591,11 @@ pmpkg_t *_alpm_pkg_find(alpm_list_t *haystack, const char *needle)
 
 			/* finally: we had hash match, verify string match */
 			if(strcmp(info->name, needle) == 0) {
-				return(info);
+				return info;
 			}
 		}
 	}
-	return(NULL);
+	return NULL;
 }
 
 /** Test if a package should be ignored.
@@ -574,18 +613,18 @@ int _alpm_pkg_should_ignore(pmpkg_t *pkg)
 
 	/* first see if the package is ignored */
 	if(alpm_list_find_str(handle->ignorepkg, alpm_pkg_get_name(pkg))) {
-		return(1);
+		return 1;
 	}
 
 	/* next see if the package is in a group that is ignored */
 	for(groups = handle->ignoregrp; groups; groups = alpm_list_next(groups)) {
 		char *grp = (char *)alpm_list_getdata(groups);
 		if(alpm_list_find_str(alpm_pkg_get_groups(pkg), grp)) {
-			return(1);
+			return 1;
 		}
 	}
 
-	return(0);
+	return 0;
 }
 
 /* vim: set ts=2 sw=2 noet: */

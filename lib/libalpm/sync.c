@@ -50,13 +50,14 @@
 #include "delta.h"
 #include "remove.h"
 #include "diskspace.h"
+#include "signing.h"
 
 /** Check for new version of pkg in sync repos
  * (only the first occurrence is considered in sync)
  */
 pmpkg_t SYMEXPORT *alpm_sync_newversion(pmpkg_t *pkg, alpm_list_t *dbs_sync)
 {
-	ASSERT(pkg != NULL, return(NULL));
+	ASSERT(pkg != NULL, return NULL);
 
 	alpm_list_t *i;
 	pmpkg_t *spkg = NULL;
@@ -68,7 +69,7 @@ pmpkg_t SYMEXPORT *alpm_sync_newversion(pmpkg_t *pkg, alpm_list_t *dbs_sync)
 	if(spkg == NULL) {
 		_alpm_log(PM_LOG_DEBUG, "'%s' not found in sync db => no upgrade\n",
 				alpm_pkg_get_name(pkg));
-		return(NULL);
+		return NULL;
 	}
 
 	/* compare versions and see if spkg is an upgrade */
@@ -76,10 +77,10 @@ pmpkg_t SYMEXPORT *alpm_sync_newversion(pmpkg_t *pkg, alpm_list_t *dbs_sync)
 		_alpm_log(PM_LOG_DEBUG, "new version of '%s' found (%s => %s)\n",
 					alpm_pkg_get_name(pkg), alpm_pkg_get_version(pkg),
 					alpm_pkg_get_version(spkg));
-		return(spkg);
+		return spkg;
 	}
 	/* spkg is not an upgrade */
-	return(NULL);
+	return NULL;
 }
 
 /** Search for packages to upgrade and add them to the transaction.
@@ -166,7 +167,8 @@ int SYMEXPORT alpm_sync_sysupgrade(int enable_downgrade)
 							continue;
 						}
 
-						/* If spkg is already in the target list, we append lpkg to spkg's removes list */
+						/* If spkg is already in the target list, we append lpkg to spkg's
+						 * removes list */
 						pmpkg_t *tpkg = _alpm_pkg_find(trans->add, spkg->name);
 						if(tpkg) {
 							/* sanity check, multiple repos can contain spkg->name */
@@ -199,7 +201,7 @@ int SYMEXPORT alpm_sync_sysupgrade(int enable_downgrade)
 		}
 	}
 
-	return(0);
+	return 0;
 }
 
 /** Find group members across a list of databases.
@@ -241,7 +243,7 @@ alpm_list_t SYMEXPORT *alpm_find_grp_pkgs(alpm_list_t *dbs,
 		}
 	}
 	alpm_list_free(ignorelist);
-	return(pkgs);
+	return pkgs;
 }
 
 /** Compute the size of the files that will be downloaded to install a
@@ -257,7 +259,7 @@ static int compute_download_size(pmpkg_t *newpkg)
 	if(newpkg->origin != PKG_FROM_SYNCDB) {
 		newpkg->infolevel |= INFRQ_DSIZE;
 		newpkg->download_size = 0;
-		return(0);
+		return 0;
 	}
 
 	fname = alpm_pkg_get_filename(newpkg);
@@ -294,7 +296,7 @@ static int compute_download_size(pmpkg_t *newpkg)
 
 	newpkg->infolevel |= INFRQ_DSIZE;
 	newpkg->download_size = size;
-	return(0);
+	return 0;
 }
 
 int _alpm_sync_prepare(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t *dbs_sync, alpm_list_t **data)
@@ -330,8 +332,10 @@ int _alpm_sync_prepare(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t *dbs_sync
 			}
 		}
 
-		/* Compute the fake local database for resolvedeps (partial fix for the phonon/qt issue) */
-		alpm_list_t *localpkgs = alpm_list_diff(_alpm_db_get_pkgcache(db_local), trans->add, _alpm_pkg_cmp);
+		/* Compute the fake local database for resolvedeps (partial fix for the
+		 * phonon/qt issue) */
+		alpm_list_t *localpkgs = alpm_list_diff(_alpm_db_get_pkgcache(db_local),
+				trans->add, _alpm_pkg_cmp);
 
 		/* Resolve packages in the transaction one at a time, in addition
 		   building up a list of packages which could not be resolved. */
@@ -512,7 +516,11 @@ int _alpm_sync_prepare(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t *dbs_sync
 	for(i = trans->add; i; i = i->next) {
 		pmpkg_t *spkg = i->data;
 		for(j = spkg->removes; j; j = j->next) {
-			trans->remove = alpm_list_add(trans->remove, _alpm_pkg_dup(j->data));
+			pmpkg_t *rpkg = j->data;
+			if(!_alpm_pkg_find(trans->remove, rpkg->name)) {
+				_alpm_log(PM_LOG_DEBUG, "adding '%s' to remove list\n", rpkg->name);
+				trans->remove = alpm_list_add(trans->remove, _alpm_pkg_dup(rpkg));
+			}
 		}
 	}
 
@@ -544,7 +552,7 @@ cleanup:
 	alpm_list_free(unresolvable);
 	alpm_list_free(remove);
 
-	return(ret);
+	return ret;
 }
 
 /** Returns the size of the files that will be downloaded to install a
@@ -557,13 +565,13 @@ off_t SYMEXPORT alpm_pkg_download_size(pmpkg_t *newpkg)
 	if(!(newpkg->infolevel & INFRQ_DSIZE)) {
 		compute_download_size(newpkg);
 	}
-	return(newpkg->download_size);
+	return newpkg->download_size;
 }
 
 static int endswith(const char *filename, const char *extension)
 {
 	const char *s = filename + strlen(filename) - strlen(extension);
-	return(strcmp(s, extension) == 0);
+	return strcmp(s, extension) == 0;
 }
 
 /** Applies delta files to create an upgraded package file.
@@ -649,7 +657,7 @@ static int apply_deltas(pmtrans_t *trans)
 		}
 	}
 
-	return(ret);
+	return ret;
 }
 
 /** Compares the md5sum of a file to the expected value.
@@ -658,33 +666,25 @@ static int apply_deltas(pmtrans_t *trans)
  * should be deleted.
  *
  * @param trans the transaction
- * @param filename the filename of the file to test
+ * @param filename the absolute path of the file to test
  * @param md5sum the expected md5sum of the file
  *
  * @return 0 if the md5sum matched, 1 if not, -1 in case of errors
  */
-static int test_md5sum(pmtrans_t *trans, const char *filename,
+static int test_md5sum(pmtrans_t *trans, const char *filepath,
 		const char *md5sum)
 {
-	char *filepath;
-	int ret;
-
-	filepath = _alpm_filecache_find(filename);
-
-	ret = _alpm_test_md5sum(filepath, md5sum);
-
+	int ret = _alpm_test_md5sum(filepath, md5sum);
 	if(ret == 1) {
 		int doremove = 0;
-		QUESTION(trans, PM_TRANS_CONV_CORRUPTED_PKG, (char *)filename,
+		QUESTION(trans, PM_TRANS_CONV_CORRUPTED_PKG, (char*)filepath,
 				NULL, NULL, &doremove);
 		if(doremove) {
 			unlink(filepath);
 		}
 	}
 
-	FREE(filepath);
-
-	return(ret);
+	return ret;
 }
 
 int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
@@ -793,12 +793,14 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 		for(i = deltas; i; i = i->next) {
 			pmdelta_t *d = alpm_list_getdata(i);
 			const char *filename = alpm_delta_get_filename(d);
+			char *filepath = _alpm_filecache_find(filename);
 			const char *md5sum = alpm_delta_get_md5sum(d);
 
-			if(test_md5sum(trans, filename, md5sum) != 0) {
+			if(test_md5sum(trans, filepath, md5sum) != 0) {
 				errors++;
 				*data = alpm_list_add(*data, strdup(filename));
 			}
+			FREE(filepath);
 		}
 		if(errors) {
 			pm_errno = PM_ERR_DLT_INVALID;
@@ -822,6 +824,7 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 	EVENT(trans, PM_TRANS_EVT_INTEGRITY_START, NULL, NULL);
 
 	errors = 0;
+
 	for(i = trans->add; i; i = i->next, current++) {
 		pmpkg_t *spkg = i->data;
 		int percent = (current * 100) / numtargs;
@@ -832,17 +835,33 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 				numtargs, current);
 
 		const char *filename = alpm_pkg_get_filename(spkg);
+		char *filepath = _alpm_filecache_find(filename);
 		const char *md5sum = alpm_pkg_get_md5sum(spkg);
+		const pmpgpsig_t *pgpsig = alpm_pkg_get_pgpsig(spkg);
 
-		if(test_md5sum(trans, filename, md5sum) != 0) {
+		/* check md5sum first */
+		if(test_md5sum(trans, filepath, md5sum) != 0) {
 			errors++;
 			*data = alpm_list_add(*data, strdup(filename));
+			FREE(filepath);
 			continue;
+		}
+		/* check PGP signature next */
+		pmdb_t *sdb = alpm_pkg_get_db(spkg);
+
+		if(sdb->pgp_verify != PM_PGP_VERIFY_NEVER) {
+			int ret = _alpm_gpgme_checksig(filepath, pgpsig);
+			if((sdb->pgp_verify == PM_PGP_VERIFY_ALWAYS && ret != 0) ||
+					(sdb->pgp_verify == PM_PGP_VERIFY_OPTIONAL && ret == 1)) {
+				errors++;
+				*data = alpm_list_add(*data, strdup(filename));
+				FREE(filepath);
+				continue;
+			}
 		}
 		/* load the package file and replace pkgcache entry with it in the target list */
 		/* TODO: alpm_pkg_get_db() will not work on this target anymore */
 		_alpm_log(PM_LOG_DEBUG, "replacing pkgcache entry with package file for target %s\n", spkg->name);
-		char *filepath = _alpm_filecache_find(filename);
 		pmpkg_t *pkgfile;
 		if(alpm_pkg_load(filepath, 1, &pkgfile) != 0) {
 			_alpm_pkg_free(pkgfile);
@@ -856,9 +875,12 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 		i->data = pkgfile;
 		_alpm_pkg_free_trans(spkg); /* spkg has been removed from the target list */
 	}
+
 	PROGRESS(trans, PM_TRANS_PROGRESS_INTEGRITY_START, "", 100,
 			numtargs, current);
 	EVENT(trans, PM_TRANS_EVT_INTEGRITY_DONE, NULL, NULL);
+
+
 	if(errors) {
 		pm_errno = PM_ERR_PKG_INVALID;
 		goto error;
@@ -928,7 +950,7 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 error:
 	FREELIST(files);
 	alpm_list_free(deltas);
-	return(ret);
+	return ret;
 }
 
 /* vim: set ts=2 sw=2 noet: */

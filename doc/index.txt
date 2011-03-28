@@ -41,6 +41,7 @@ configuration files dealing with pacman.
 * linkman:makepkg[8]
 * linkman:makepkg.conf[5]
 * linkman:pacman[8]
+* linkman:pacman-key[8]
 * linkman:pacman.conf[5]
 * linkman:repo-add[8]
 * linkman:vercmp[8]
@@ -63,6 +64,8 @@ Releases
 `------------`-------
 Date         Version
 ---------------------
+2011-03-23   v3.5.1
+2011-03-16   v3.5.0
 2011-01-22   v3.4.3
 2010-12-29   v3.4.2
 2010-09-03   v3.4.1

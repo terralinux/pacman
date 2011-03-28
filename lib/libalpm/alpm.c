@@ -23,9 +23,8 @@
 
 #include "config.h"
 
-/* connection caching setup */
-#ifdef HAVE_LIBFETCH
-#include <fetch.h>
+#ifdef HAVE_LIBCURL
+#include <curl/curl.h>
 #endif
 
 /* libalpm */
@@ -58,18 +57,19 @@ int SYMEXPORT alpm_initialize(void)
 		/* error code should be set */
 		_alpm_handle_free(handle);
 		handle = NULL;
-		return(-1);
+		return -1;
 	}
 
 #ifdef ENABLE_NLS
 	bindtextdomain("libalpm", LOCALEDIR);
 #endif
 
-#ifdef HAVE_LIBFETCH
-	fetchConnectionCacheInit(5, 1);
+#ifdef HAVE_LIBCURL
+	curl_global_init(CURL_GLOBAL_SSL);
+	handle->curl = curl_easy_init();
 #endif
 
-	return(0);
+	return 0;
 }
 
 /** Release the library.  This should be the last alpm call you make.
@@ -77,22 +77,31 @@ int SYMEXPORT alpm_initialize(void)
  */
 int SYMEXPORT alpm_release(void)
 {
+	pmdb_t *db;
+
 	ALPM_LOG_FUNC;
 
 	ASSERT(handle != NULL, RET_ERR(PM_ERR_HANDLE_NULL, -1));
 
+	/* close local database */
+	db = handle->db_local;
+	if(db) {
+		db->ops->unregister(db);
+		handle->db_local = NULL;
+	}
+
 	if(alpm_db_unregister_all() == -1) {
-		return(-1);
+		return -1;
 	}
 
 	_alpm_handle_free(handle);
 	handle = NULL;
 
-#ifdef HAVE_LIBFETCH
-	fetchConnectionCacheClose();
+#ifdef HAVE_LIBCURL
+	curl_global_cleanup();
 #endif
 
-	return(0);
+	return 0;
 }
 
 /** @} */
@@ -103,7 +112,7 @@ int SYMEXPORT alpm_release(void)
 
 /* Get the version of library */
 const char SYMEXPORT *alpm_version(void) {
-	return(LIB_VERSION);
+	return LIB_VERSION;
 }
 
 /* vim: set ts=2 sw=2 noet: */

@@ -29,6 +29,7 @@
 
 #include "alpm.h"
 #include "db.h"
+#include "signing.h"
 
 typedef enum _pmpkgfrom_t {
 	PKG_FROM_FILE = 1,
@@ -97,6 +98,8 @@ struct __pmpkg_t {
 	char *packager;
 	char *md5sum;
 	char *arch;
+
+	pmpgpsig_t pgpsig;
 
 	time_t builddate;
 	time_t installdate;

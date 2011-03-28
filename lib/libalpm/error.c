@@ -20,21 +20,14 @@
 
 #include "config.h"
 
-/* TODO: needed for the libfetch stuff, unfortunately- we should kill it */
-#include <stdio.h>
-/* the following two are needed for FreeBSD's libfetch */
-#include <limits.h> /* PATH_MAX */
-#if defined(HAVE_SYS_PARAM_H)
-#include <sys/param.h> /* MAXHOSTNAMELEN */
-#endif
-
-#ifdef HAVE_LIBFETCH
-#include <fetch.h> /* fetchLastErrString */
+#ifdef HAVE_LIBCURL
+#include <curl/curl.h>
 #endif
 
 /* libalpm */
 #include "util.h"
 #include "alpm.h"
+#include "handle.h"
 
 const char SYMEXPORT *alpm_strerrorlast(void)
 {
@@ -122,6 +115,13 @@ const char SYMEXPORT *alpm_strerror(int err)
 			return _("package architecture is not valid");
 		case PM_ERR_PKG_REPO_NOT_FOUND:
 			return _("could not find repository for target");
+		/* Signatures */
+		case PM_ERR_SIG_MISSINGDIR:
+			return _("signature directory not configured correctly");
+		case PM_ERR_SIG_INVALID:
+			return _("invalid PGP signature");
+		case PM_ERR_SIG_UNKNOWN:
+			return _("unknown PGP signature");
 		/* Deltas */
 		case PM_ERR_DLT_INVALID:
 			return _("invalid or corrupted delta");
@@ -147,13 +147,15 @@ const char SYMEXPORT *alpm_strerror(int err)
 			 * requires the archive struct, so we can't. Just use a generic
 			 * error string instead. */
 			return _("libarchive error");
-		case PM_ERR_LIBFETCH:
-#ifdef HAVE_LIBFETCH
-			return fetchLastErrString;
+		case PM_ERR_LIBCURL:
+#ifdef HAVE_LIBCURL
+			return curl_easy_strerror(handle->curlerr);
 #else
 			/* obviously shouldn't get here... */
 			return _("download library error");
 #endif
+		case PM_ERR_GPGME:
+			return _("gpgme error");
 		case PM_ERR_EXTERNAL_DOWNLOAD:
 			return _("error invoking external downloader");
 		/* Unknown error! */
