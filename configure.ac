@@ -42,12 +42,12 @@ AC_PREREQ(2.62)
 #     pacman_version_micro += 1
 
 m4_define([lib_current], [6])
-m4_define([lib_revision], [1])
+m4_define([lib_revision], [2])
 m4_define([lib_age], [0])
 
 m4_define([pacman_version_major], [3])
 m4_define([pacman_version_minor], [5])
-m4_define([pacman_version_micro], [1])
+m4_define([pacman_version_micro], [2])
 m4_define([pacman_version],
           [pacman_version_major.pacman_version_minor.pacman_version_micro])
 
@@ -131,6 +131,9 @@ AC_PATH_PROGS([BASH_SHELL], [bash bash4 bash3], [false])
 AM_GNU_GETTEXT([external])
 AM_GNU_GETTEXT_VERSION(0.13.1)
 
+AC_CHECK_LIB([m], [fabs], ,
+	AC_MSG_ERROR([libm is needed to compile pacman!]))
+
 # Check for libarchive
 AC_CHECK_LIB([archive], [archive_read_data], ,
 	AC_MSG_ERROR([libarchive is needed to compile pacman!]))
@@ -154,7 +157,8 @@ AC_CHECK_LIB([gpgme], [gpgme_check_version], ,
 # Checks for header files.
 AC_CHECK_HEADERS([fcntl.h glob.h libintl.h locale.h mntent.h string.h \
                   sys/ioctl.h sys/mount.h sys/param.h sys/statvfs.h \
-                  sys/time.h sys/types.h sys/ucred.h syslog.h wchar.h])
+                  sys/time.h sys/types.h sys/ucred.h syslog.h termios.h \
+                  wchar.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_INLINE
@@ -173,7 +177,7 @@ AC_FUNC_GETMNTENT
 AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
 AC_FUNC_MKTIME
 AC_CHECK_FUNCS([geteuid getmntinfo realpath regcomp strcasecmp \
-                strndup strrchr strsep swprintf \
+                strndup strrchr strsep swprintf tcflush \
                 wcwidth uname])
 # For the diskspace code
 FS_STATS_TYPE

@@ -31,12 +31,14 @@
 #include <stdint.h> /* intmax_t */
 #include <string.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <ctype.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <limits.h>
 #include <wchar.h>
+#ifdef HAVE_TERMIOS_H
+#include <termios.h> /* tcflush */
+#endif
 
 #include <alpm.h>
 #include <alpm_list.h>
@@ -98,6 +100,18 @@ int needs_root(void)
 		default:
 			return 0;
 	}
+}
+
+/* discard unhandled input on the terminal's input buffer */
+static int flush_term_input(void) {
+#ifdef HAVE_TCFLUSH
+	if(isatty(fileno(stdin))) {
+		return(tcflush(fileno(stdin), TCIFLUSH));
+	}
+#endif
+
+	/* fail silently */
+	return 0;
 }
 
 /* gets the current screen column width */
@@ -440,6 +454,116 @@ void string_display(const char *title, const char *string)
 	printf("\n");
 }
 
+static void table_print_line(const alpm_list_t *line,
+		const alpm_list_t *formats)
+{
+	const alpm_list_t *curformat = formats;
+	const alpm_list_t *curcell = line;
+
+	while(curcell && curformat) {
+		printf(alpm_list_getdata(curformat), alpm_list_getdata(curcell));
+		curcell = alpm_list_next(curcell);
+		curformat = alpm_list_next(curformat);
+	}
+
+	printf("\n");
+}
+
+/* creates format strings by checking max cell lengths in cols */
+static alpm_list_t *table_create_format(const alpm_list_t *header,
+		const alpm_list_t *rows)
+{
+	alpm_list_t *longest_str, *longest_strs = NULL;
+	alpm_list_t *formats = NULL;
+	const alpm_list_t *i, *row, *cell;
+	char *str, *formatstr;
+	const int padding = 2;
+	int colwidth, totalwidth = 0;
+	int curcol = 0;
+
+	/* header determines column count and initial values of longest_strs */
+	for(i = header; i; i = alpm_list_next(i)) {
+		longest_strs = alpm_list_add(longest_strs, alpm_list_getdata(i));
+	}
+
+	/* now find the longest string in each column */
+	for(longest_str = longest_strs; longest_str;
+			longest_str = alpm_list_next(longest_str), curcol++) {
+		for(i = rows; i; i = alpm_list_next(i)) {
+			row = alpm_list_getdata(i);
+			cell = alpm_list_nth(row, curcol);
+			str = alpm_list_getdata(cell);
+
+			if(strlen(str) > strlen(alpm_list_getdata(longest_str))) {
+				longest_str->data = str;
+			}
+		}
+	}
+
+	/* now use the column width info to generate format strings */
+	for(i = longest_strs; i; i = alpm_list_next(i)) {
+		colwidth = strlen(alpm_list_getdata(i)) + padding;
+		totalwidth += colwidth;
+
+		/* right align the last column for a cleaner table display */
+		str = (alpm_list_next(i) != NULL) ? "%%-%ds" : "%%%ds";
+		pm_asprintf(&formatstr, str, colwidth);
+
+		formats = alpm_list_add(formats, formatstr);
+	}
+
+	alpm_list_free(longest_strs);
+
+	/* return NULL if terminal is not wide enough */
+	if(totalwidth > getcols()) {
+		fprintf(stderr, _("insufficient columns available for table display\n"));
+		FREELIST(formats);
+		return(NULL);
+	}
+
+	return(formats);
+}
+
+/** Displays the list in table format
+ *
+ * @param title the tables title
+ * @param header the column headers. column count is determined by the nr
+ *               of headers
+ * @param rows the rows to display as a list of lists of strings. the outer
+ *             list represents the rows, the inner list the cells (= columns)
+ *
+ * @return -1 if not enough terminal cols available, else 0
+ */
+int table_display(const char *title, const alpm_list_t *header,
+		const alpm_list_t *rows)
+{
+	const alpm_list_t *i;
+	alpm_list_t *formats;
+
+	if(rows == NULL || header == NULL) {
+		return(0);
+	}
+
+	formats = table_create_format(header, rows);
+	if(formats == NULL) {
+		return(-1);
+	}
+
+	if(title != NULL) {
+		printf("%s\n\n", title);
+	}
+
+	table_print_line(header, formats);
+	printf("\n");
+
+	for(i = rows; i; i = alpm_list_next(i)) {
+		table_print_line(alpm_list_getdata(i), formats);
+	}
+
+	FREELIST(formats);
+	return(0);
+}
+
 void list_display(const char *title, const alpm_list_t *list)
 {
 	const alpm_list_t *i;
@@ -464,7 +588,7 @@ void list_display(const char *title, const alpm_list_t *list)
 				for (j = 1; j <= len; j++) {
 					printf(" ");
 				}
-			} else if (cols != len) {
+			} else if(cols != len) {
 				/* 2 spaces are added if this is not the first element on a line. */
 				printf("  ");
 				cols += 2;
@@ -503,20 +627,74 @@ void list_display_linebreak(const char *title, const alpm_list_t *list)
 		}
 	}
 }
+
+/* creates a header row for use with table_display */
+static alpm_list_t *create_verbose_header(int install)
+{
+	alpm_list_t *res = NULL;
+	char *str;
+
+	pm_asprintf(&str, "%s", _("Name"));
+	res = alpm_list_add(res, str);
+	pm_asprintf(&str, "%s", _("Old Version"));
+	res = alpm_list_add(res, str);
+	if(install) {
+		pm_asprintf(&str, "%s", _("New Version"));
+		res = alpm_list_add(res, str);
+	}
+	pm_asprintf(&str, "%s", _("Size"));
+	res = alpm_list_add(res, str);
+
+	return(res);
+}
+
+/* returns package info as list of strings */
+static alpm_list_t *create_verbose_row(pmpkg_t *pkg, int install)
+{
+	char *str;
+	double size;
+	const char *label;
+	alpm_list_t *ret = NULL;
+	pmdb_t *ldb = alpm_option_get_localdb();
+
+	/* a row consists of the package name, */
+	pm_asprintf(&str, "%s", alpm_pkg_get_name(pkg));
+	ret = alpm_list_add(ret, str);
+
+	/* old and new versions */
+	if(install) {
+		pmpkg_t *oldpkg = alpm_db_get_pkg(ldb, alpm_pkg_get_name(pkg));
+		pm_asprintf(&str, "%s",
+				oldpkg != NULL ? alpm_pkg_get_version(oldpkg) : "");
+		ret = alpm_list_add(ret, str);
+	}
+
+	pm_asprintf(&str, "%s", alpm_pkg_get_version(pkg));
+	ret = alpm_list_add(ret, str);
+
+	/* and size */
+	size = humanize_size(alpm_pkg_get_size(pkg), 'M', 1, &label);
+	pm_asprintf(&str, "%.2f %s", size, label);
+	ret = alpm_list_add(ret, str);
+
+	return(ret);
+}
+
 /* prepare a list of pkgs to display */
 void display_targets(const alpm_list_t *pkgs, int install)
 {
 	char *str;
+	const char *title, *label;
+	double size;
 	const alpm_list_t *i;
 	off_t isize = 0, dlsize = 0;
-	double mbisize = 0.0, mbdlsize = 0.0;
-	alpm_list_t *targets = NULL;
+	alpm_list_t *j, *lp, *header = NULL, *targets = NULL;
 
 	if(!pkgs) {
 		return;
 	}
 
-	printf("\n");
+	/* gather pkg infos */
 	for(i = pkgs; i; i = alpm_list_next(i)) {
 		pmpkg_t *pkg = alpm_list_getdata(i);
 
@@ -525,43 +703,58 @@ void display_targets(const alpm_list_t *pkgs, int install)
 		}
 		isize += alpm_pkg_get_isize(pkg);
 
-		/* print the package size with the output if ShowSize option set */
-		if(config->showsize) {
-			double mbsize = (double)alpm_pkg_get_size(pkg) / (1024.0 * 1024.0);
-
-			pm_asprintf(&str, "%s-%s [%.2f MB]", alpm_pkg_get_name(pkg),
-					alpm_pkg_get_version(pkg), mbsize);
+		if(config->verbosepkglists) {
+			targets = alpm_list_add(targets, create_verbose_row(pkg, install));
 		} else {
 			pm_asprintf(&str, "%s-%s", alpm_pkg_get_name(pkg),
 					alpm_pkg_get_version(pkg));
+			targets = alpm_list_add(targets, str);
 		}
-		targets = alpm_list_add(targets, str);
 	}
 
-	/* Convert byte sizes to MB */
-	mbdlsize = (double)dlsize / (1024.0 * 1024.0);
-	mbisize = (double)isize / (1024.0 * 1024.0);
+	/* print to screen */
+	title = install ? _("Targets (%d):") : _("Remove (%d):");
+	pm_asprintf(&str, title, alpm_list_count(pkgs));
 
-	if(install) {
-		pm_asprintf(&str, _("Targets (%d):"), alpm_list_count(targets));
-		list_display(str, targets);
-		free(str);
-		printf("\n");
-
-		printf(_("Total Download Size:    %.2f MB\n"), mbdlsize);
-		if(!(config->flags & PM_TRANS_FLAG_DOWNLOADONLY)) {
-			printf(_("Total Installed Size:   %.2f MB\n"), mbisize);
+	printf("\n");
+	if(config->verbosepkglists) {
+		header = create_verbose_header(install);
+		if(table_display(str, header, targets) != 0) {
+			config->verbosepkglists = 0;
+			display_targets(pkgs, install);
+			goto out;
 		}
 	} else {
-		pm_asprintf(&str, _("Remove (%d):"), alpm_list_count(targets));
 		list_display(str, targets);
-		free(str);
-		printf("\n");
+	}
+	printf("\n");
 
-		printf(_("Total Removed Size:   %.2f MB\n"), mbisize);
+	if(install) {
+		size = humanize_size(dlsize, 'M', 1, &label);
+		printf(_("Total Download Size:    %.2f %s\n"), size, label);
+		if(!(config->flags & PM_TRANS_FLAG_DOWNLOADONLY)) {
+			size = humanize_size(isize, 'M', 1, &label);
+			printf(_("Total Installed Size:   %.2f %s\n"), size, label);
+		}
+	} else {
+		size = humanize_size(isize, 'M', 1, &label);
+		printf(_("Total Removed Size:   %.2f %s\n"), size, label);
 	}
 
-	FREELIST(targets);
+out:
+	/* cleanup */
+	if(config->verbosepkglists) {
+		/* targets is a list of lists of strings, free inner lists here */
+		for(j = alpm_list_first(targets); j; j = alpm_list_next(j)) {
+			lp = alpm_list_getdata(j);
+			FREELIST(lp);
+		}
+		alpm_list_free(targets);
+		FREELIST(header);
+	} else {
+		FREELIST(targets);
+	}
+	free(str);
 }
 
 static off_t pkg_get_size(pmpkg_t *pkg)
@@ -597,6 +790,44 @@ static char *pkg_get_location(pmpkg_t *pkg)
 			pm_asprintf(&string, "%s-%s", alpm_pkg_get_name(pkg), alpm_pkg_get_version(pkg));
 			return string;
 	}
+}
+
+/** Converts sizes in bytes into human readable units.
+ *
+ * @param bytes the size in bytes
+ * @param target_unit '\0' or a short label. If equal to one of the short unit
+ * labels ('B', 'K', ...) bytes is converted to target_unit; if '\0', the first
+ * unit which will bring the value to below a threshold of 2048 will be chosen.
+ * @param long_labels whether to use short ("K") or long ("KiB") unit labels
+ * @param label will be set to the appropriate unit label
+ *
+ * @return the size in the appropriate unit
+ */
+double humanize_size(off_t bytes, const char target_unit, int long_labels,
+		const char **label)
+{
+	static const char *shortlabels[] = {"B", "K", "M", "G", "T", "P"};
+	static const char *longlabels[] = {"B", "KiB", "MiB", "GiB", "TiB", "PiB"};
+	static const int unitcount = sizeof(shortlabels) / sizeof(shortlabels[0]);
+
+	const char **labels = long_labels ? longlabels : shortlabels;
+	double val = (double)bytes;
+	int index;
+
+	for(index = 0; index < unitcount - 1; index++) {
+		if(target_unit != '\0' && shortlabels[index][0] == target_unit) {
+			break;
+		} else if(target_unit == '\0' && val <= 2048.0) {
+			break;
+		}
+		val /= 1024.0;
+	}
+
+	if(label) {
+		*label = labels[index];
+	}
+
+	return(val);
 }
 
 void print_packages(const alpm_list_t *packages)
@@ -746,14 +977,15 @@ static int multiselect_parse(char *array, int count, char *response)
 		char *ends = NULL;
 		char *starts = strtok_r(str, " ", &saveptr);
 
-		if (starts == NULL)
+		if(starts == NULL) {
 			break;
+		}
 		strtrim(starts);
 		int len = strlen(starts);
 		if(len == 0)
 			continue;
 
-		if (*starts == '^') {
+		if(*starts == '^') {
 			starts++;
 			len--;
 			include = 0;
@@ -765,9 +997,9 @@ static int multiselect_parse(char *array, int count, char *response)
 		if(len > 1) {
 			/* check for range */
 			char *p;
-			if((p = strchr(starts+1, '-'))) {
+			if((p = strchr(starts + 1, '-'))) {
 				*p = 0;
-				ends = p+1;
+				ends = p + 1;
 			}
 		}
 
@@ -777,9 +1009,11 @@ static int multiselect_parse(char *array, int count, char *response)
 		if(!ends) {
 			array[start-1] = include;
 		} else {
-			if(parseindex(ends, &end, start, count) != 0)
+			int d;
+			if(parseindex(ends, &end, start, count) != 0) {
 				return -1;
-			for(int d = start; d <= end; d++) {
+			}
+			for(d = start; d <= end; d++) {
 				array[d-1] = include;
 			}
 		}
@@ -811,6 +1045,8 @@ int multiselect_question(char *array, int count)
 			fprintf(stream, "\n");
 			break;
 		}
+
+		flush_term_input();
 
 		if(fgets(response, sizeof(response), stdin)) {
 			strtrim(response);
@@ -849,6 +1085,8 @@ int select_question(int count)
 			break;
 		}
 
+		flush_term_input();
+
 		if(fgets(response, sizeof(response), stdin)) {
 			strtrim(response);
 			if(strlen(response) > 0) {
@@ -878,6 +1116,10 @@ static int question(short preset, char *fmt, va_list args)
 		stream = stderr;
 	}
 
+	/* ensure all text makes it to the screen before we prompt the user */
+	fflush(stdout);
+	fflush(stderr);
+
 	vfprintf(stream, fmt, args);
 
 	if(preset) {
@@ -891,6 +1133,9 @@ static int question(short preset, char *fmt, va_list args)
 		return preset;
 	}
 
+	fflush(stream);
+	flush_term_input();
+
 	if(fgets(response, sizeof(response), stdin)) {
 		strtrim(response);
 		if(strlen(response) == 0) {
@@ -899,7 +1144,7 @@ static int question(short preset, char *fmt, va_list args)
 
 		if(strcasecmp(response, _("Y")) == 0 || strcasecmp(response, _("YES")) == 0) {
 			return 1;
-		} else if (strcasecmp(response, _("N")) == 0 || strcasecmp(response, _("NO")) == 0) {
+		} else if(strcasecmp(response, _("N")) == 0 || strcasecmp(response, _("NO")) == 0) {
 			return 0;
 		}
 	}
@@ -1070,7 +1315,7 @@ char *strndup(const char *s, size_t n)
   size_t len = strnlen(s, n);
   char *new = (char *) malloc(len + 1);
 
-  if (new == NULL)
+  if(new == NULL)
     return NULL;
 
   new[len] = '\0';

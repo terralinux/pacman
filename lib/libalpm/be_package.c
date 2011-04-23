@@ -20,10 +20,8 @@
 
 #include "config.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 #include <errno.h>
 
 /* libarchive */
@@ -60,7 +58,7 @@ static void *_package_changelog_open(pmpkg_t *pkg)
 	archive_read_support_compression_all(archive);
 	archive_read_support_format_all(archive);
 
-	if (archive_read_open_filename(archive, pkgfile,
+	if(archive_read_open_filename(archive, pkgfile,
 				ARCHIVE_DEFAULT_BYTES_PER_BLOCK) != ARCHIVE_OK) {
 		RET_ERR(PM_ERR_PKG_OPEN, NULL);
 	}
@@ -91,7 +89,7 @@ static void *_package_changelog_open(pmpkg_t *pkg)
 static size_t _package_changelog_read(void *ptr, size_t size,
 		const pmpkg_t *pkg, const void *fp)
 {
-	ssize_t sret = archive_read_data((struct archive*)fp, ptr, size);
+	ssize_t sret = archive_read_data((struct archive *)fp, ptr, size);
 	/* Report error (negative values) */
 	if(sret < 0) {
 		pm_errno = PM_ERR_LIBARCHIVE;
@@ -100,14 +98,6 @@ static size_t _package_changelog_read(void *ptr, size_t size,
 		return (size_t)sret;
 	}
 }
-
-/*
-static int _package_changelog_feof(const pmpkg_t *pkg, void *fp)
-{
-	// note: this doesn't quite work, no feof in libarchive
-	return archive_read_data((struct archive*)fp, NULL, 0);
-}
-*/
 
 /**
  * Close a package changelog for reading. Similar to fclose in functionality,
@@ -253,7 +243,6 @@ static pmpkg_t *pkg_load(const char *pkgfile, int full)
 
 	/* attempt to stat the package file, ensure it exists */
 	if(stat(pkgfile, &st) == 0) {
-		char *pgpfile;
 		int sig_ret;
 
 		newpkg = _alpm_pkg_new();
@@ -263,13 +252,9 @@ static pmpkg_t *pkg_load(const char *pkgfile, int full)
 		newpkg->filename = strdup(pkgfile);
 		newpkg->size = st.st_size;
 
-		/* look around for a PGP signature file; load if available */
-		MALLOC(pgpfile, strlen(pkgfile) + 5, RET_ERR(PM_ERR_MEMORY, NULL));
-		sprintf(pgpfile, "%s.sig", pkgfile);
 		/* TODO: do something with ret value */
-		sig_ret = _alpm_load_signature(pgpfile, &(newpkg->pgpsig));
+		sig_ret = _alpm_load_signature(pkgfile, &(newpkg->pgpsig));
 		(void)sig_ret;
-		FREE(pgpfile);
 	} else {
 		/* couldn't stat the pkgfile, return an error */
 		RET_ERR(PM_ERR_PKG_OPEN, NULL);
@@ -283,20 +268,11 @@ static pmpkg_t *pkg_load(const char *pkgfile, int full)
 	archive_read_support_compression_all(archive);
 	archive_read_support_format_all(archive);
 
-	if (archive_read_open_filename(archive, pkgfile,
+	if(archive_read_open_filename(archive, pkgfile,
 				ARCHIVE_DEFAULT_BYTES_PER_BLOCK) != ARCHIVE_OK) {
 		alpm_pkg_free(newpkg);
 		RET_ERR(PM_ERR_PKG_OPEN, NULL);
 	}
-
-	newpkg = _alpm_pkg_new();
-	if(newpkg == NULL) {
-		archive_read_finish(archive);
-		RET_ERR(PM_ERR_MEMORY, NULL);
-	}
-
-	newpkg->filename = strdup(pkgfile);
-	newpkg->size = st.st_size;
 
 	_alpm_log(PM_LOG_DEBUG, "starting package load for %s\n", pkgfile);
 
@@ -389,16 +365,6 @@ error:
 	return NULL;
 }
 
-/** Create a package from a file.
- * If full is false, the archive is read only until all necessary
- * metadata is found. If it is true, the entire archive is read, which
- * serves as a verfication of integrity and the filelist can be created.
- * @param filename location of the package tarball
- * @param full whether to stop the load after metadata is read or continue
- *             through the full archive
- * @param pkg address of the package pointer
- * @return 0 on success, -1 on error (pm_errno is set accordingly)
- */
 int SYMEXPORT alpm_pkg_load(const char *filename, int full, pmpkg_t **pkg)
 {
 	ALPM_LOG_FUNC;

@@ -39,7 +39,6 @@
 #include <sys/stat.h>
 #include <sys/utsname.h> /* uname */
 #include <locale.h> /* setlocale */
-#include <time.h> /* time_t */
 #include <errno.h>
 #include <glob.h>
 #if defined(PACMAN_DEBUG) && defined(HAVE_MCHECK_H)
@@ -55,7 +54,6 @@
 #include "util.h"
 #include "callback.h"
 #include "conf.h"
-#include "package.h"
 
 /* list of targets specified on command line */
 static alpm_list_t *pm_targets;
@@ -170,7 +168,7 @@ static void usage(int op, const char * const myname)
 			addlist(_("  -w, --downloadonly   download packages but do not install/upgrade anything\n"));
 			addlist(_("  -y, --refresh        download fresh package databases from the server\n"));
 			addlist(_("      --needed         don't reinstall up to date packages\n"));
-		} else if (op == PM_OP_DATABASE) {
+		} else if(op == PM_OP_DATABASE) {
 			printf("%s:  %s {-D --database} <%s> <%s>\n", str_usg, myname, str_opt, str_pkg);
 			printf("%s:\n", str_opt);
 			addlist(_("      --asdeps         mark packages as non-explicitly installed\n"));
@@ -240,7 +238,7 @@ static void version(void)
 static void localize(void)
 {
 	static int init = 0;
-	if (!init) {
+	if(!init) {
 		setlocale(LC_ALL, "");
 		bindtextdomain(PACKAGE, LOCALEDIR);
 		textdomain(PACKAGE);
@@ -264,7 +262,7 @@ static void setuseragent(void)
 
 static void setarch(const char *arch)
 {
-	if (strcmp(arch, "auto") == 0) {
+	if(strcmp(arch, "auto") == 0) {
 		struct utsname un;
 		uname(&un);
 		pm_printf(PM_LOG_DEBUG, "config: Architecture: %s\n", un.machine);
@@ -322,7 +320,7 @@ static void handler(int signum)
 		xwrite(out, msg1, strlen(msg1));
 		xwrite(err, msg2, strlen(msg2));
 		exit(signum);
-	} else if((signum == SIGINT)) {
+	} else if(signum == SIGINT) {
 		const char *msg = "\nInterrupt signal received\n";
 		xwrite(err, msg, strlen(msg));
 		if(alpm_trans_interrupt() == 0) {
@@ -346,7 +344,7 @@ static void handler(int signum)
 static void setlibpaths(void)
 {
 	static int init = 0;
-	if (!init) {
+	if(!init) {
 		int ret = 0;
 
 		pm_printf(PM_LOG_DEBUG, "setlibpaths() called\n");
@@ -412,7 +410,7 @@ static void setlibpaths(void)
 
 #define check_optarg() if(!optarg) { return 1; }
 
-typedef void (*fn_add) (const char *s);
+typedef int (*fn_add) (const char *s);
 
 static int parsearg_util_addlist(fn_add fn)
 {
@@ -594,7 +592,7 @@ static int parsearg_trans(int opt)
 
 static int parsearg_remove(int opt)
 {
-	if (parsearg_trans(opt) == 0)
+	if(parsearg_trans(opt) == 0)
 		return 0;
 	switch(opt) {
 		case 'c': config->flags |= PM_TRANS_FLAG_CASCADE; break;
@@ -615,7 +613,7 @@ static int parsearg_remove(int opt)
 /* options common to -S -U */
 static int parsearg_upgrade(int opt)
 {
-	if (parsearg_trans(opt) == 0)
+	if(parsearg_trans(opt) == 0)
 		return 0;
 	switch(opt) {
 		case 'f': config->flags |= PM_TRANS_FLAG_FORCE; break;
@@ -634,7 +632,7 @@ static int parsearg_upgrade(int opt)
 
 static int parsearg_sync(int opt)
 {
-	if (parsearg_upgrade(opt) == 0)
+	if(parsearg_upgrade(opt) == 0)
 		return 0;
 	switch(opt) {
 		case OP_NEEDED: config->flags |= PM_TRANS_FLAG_NEEDED; break;
@@ -787,7 +785,7 @@ static int parseargs(int argc, char *argv[])
 				result = 1;
 				break;
 		}
-		if (result == 0) {
+		if(result == 0) {
 			continue;
 		}
 
@@ -810,25 +808,28 @@ static int parseargs(int argc, char *argv[])
 }
 
 /* helper for being used with setrepeatingoption */
-static void option_add_holdpkg(const char *name) {
+static int option_add_holdpkg(const char *name) {
 	config->holdpkg = alpm_list_add(config->holdpkg, strdup(name));
+	return 0;
 }
 
 /* helper for being used with setrepeatingoption */
-static void option_add_syncfirst(const char *name) {
+static int option_add_syncfirst(const char *name) {
 	config->syncfirst = alpm_list_add(config->syncfirst, strdup(name));
+	return 0;
 }
 
 /* helper for being used with setrepeatingoption */
-static void option_add_cleanmethod(const char *value) {
-	if (strcmp(value, "KeepInstalled") == 0) {
+static int option_add_cleanmethod(const char *value) {
+	if(strcmp(value, "KeepInstalled") == 0) {
 		config->cleanmethod |= PM_CLEAN_KEEPINST;
-	} else if (strcmp(value, "KeepCurrent") == 0) {
+	} else if(strcmp(value, "KeepCurrent") == 0) {
 		config->cleanmethod |= PM_CLEAN_KEEPCUR;
 	} else {
 		pm_printf(PM_LOG_ERROR, _("invalid value for 'CleanMethod' : '%s'\n"),
 				value);
 	}
+	return 0;
 }
 
 /** Add repeating options such as NoExtract, NoUpgrade, etc to libalpm
@@ -839,7 +840,7 @@ static void option_add_cleanmethod(const char *value) {
  * @param optionfunc a function pointer to an alpm_option_add_* function
  */
 static void setrepeatingoption(char *ptr, const char *option,
-		void (*optionfunc)(const char*))
+		int (*optionfunc)(const char *))
 {
 	char *q;
 
@@ -985,9 +986,9 @@ static int _parse_options(const char *key, char *value,
 		} else if(strcmp(key, "ILoveCandy") == 0) {
 			config->chomp = 1;
 			pm_printf(PM_LOG_DEBUG, "config: chomp\n");
-		} else if(strcmp(key, "ShowSize") == 0) {
-			config->showsize = 1;
-			pm_printf(PM_LOG_DEBUG, "config: showsize\n");
+		} else if(strcmp(key, "VerbosePkgLists") == 0) {
+			config->verbosepkglists = 1;
+			pm_printf(PM_LOG_DEBUG, "config: verbosepkglists\n");
 		} else if(strcmp(key, "UseDelta") == 0) {
 			alpm_option_set_usedelta(1);
 			pm_printf(PM_LOG_DEBUG, "config: usedelta\n");
@@ -1038,22 +1039,34 @@ static int _parse_options(const char *key, char *value,
 				config->rootdir = strdup(value);
 				pm_printf(PM_LOG_DEBUG, "config: rootdir: %s\n", value);
 			}
-		} else if (strcmp(key, "GPGDir") == 0) {
+		} else if(strcmp(key, "GPGDir") == 0) {
 			if(!config->gpgdir) {
 				config->gpgdir = strdup(value);
 				pm_printf(PM_LOG_DEBUG, "config: gpgdir: %s\n", value);
 			}
-		} else if (strcmp(key, "LogFile") == 0) {
+		} else if(strcmp(key, "LogFile") == 0) {
 			if(!config->logfile) {
 				config->logfile = strdup(value);
 				pm_printf(PM_LOG_DEBUG, "config: logfile: %s\n", value);
 			}
-		} else if (strcmp(key, "XferCommand") == 0) {
+		} else if(strcmp(key, "XferCommand") == 0) {
 			config->xfercommand = strdup(value);
 			alpm_option_set_fetchcb(download_with_xfercommand);
 			pm_printf(PM_LOG_DEBUG, "config: xfercommand: %s\n", value);
-		} else if (strcmp(key, "CleanMethod") == 0) {
+		} else if(strcmp(key, "CleanMethod") == 0) {
 			setrepeatingoption(value, "CleanMethod", option_add_cleanmethod);
+		} else if(strcmp(key, "VerifySig") == 0) {
+			if(strcmp(value, "Always") == 0) {
+				alpm_option_set_default_sigverify(PM_PGP_VERIFY_ALWAYS);
+			} else if(strcmp(value, "Optional") == 0) {
+				alpm_option_set_default_sigverify(PM_PGP_VERIFY_OPTIONAL);
+			} else if(strcmp(value, "Never") == 0) {
+				alpm_option_set_default_sigverify(PM_PGP_VERIFY_NEVER);
+			} else {
+				pm_printf(PM_LOG_ERROR, _("invalid value for 'VerifySig' : '%s'\n"), value);
+				return 1;
+			}
+			pm_printf(PM_LOG_DEBUG, "config: setting default VerifySig: %s\n", value);
 		} else {
 
 			pm_printf(PM_LOG_WARNING,
@@ -1247,18 +1260,18 @@ static int _parseconfig(const char *file, const char *givensection,
 					goto cleanup;
 				}
 			} else if(strcmp(key, "VerifySig") == 0) {
-				if (strcmp(value, "Always") == 0) {
-					ret = alpm_db_set_pgp_verify(db,PM_PGP_VERIFY_ALWAYS);
-				} else if (strcmp(value, "Optional") == 0) {
-					ret = alpm_db_set_pgp_verify(db,PM_PGP_VERIFY_OPTIONAL);
-				} else if (strcmp(value, "Never") == 0) {
-					ret = alpm_db_set_pgp_verify(db,PM_PGP_VERIFY_NEVER);
+				if(strcmp(value, "Always") == 0) {
+					ret = alpm_db_set_pgp_verify(db, PM_PGP_VERIFY_ALWAYS);
+				} else if(strcmp(value, "Optional") == 0) {
+					ret = alpm_db_set_pgp_verify(db, PM_PGP_VERIFY_OPTIONAL);
+				} else if(strcmp(value, "Never") == 0) {
+					ret = alpm_db_set_pgp_verify(db, PM_PGP_VERIFY_NEVER);
 				} else {
 					pm_printf(PM_LOG_ERROR, _("invalid value for 'VerifySig' : '%s'\n"), value);
 					ret = 1;
 					goto cleanup;
 				}
-				if (ret != 0) {
+				if(ret != 0) {
 					pm_printf(PM_LOG_ERROR, _("could not add pgp verify option to database '%s': %s (%s)\n"),
 							alpm_db_get_name(db), value, alpm_strerrorlast());
 					goto cleanup;
@@ -1423,7 +1436,7 @@ int main(int argc, char *argv[])
 			}
 		}
 		/* check for buffer overflow */
-		if (i >= PATH_MAX) {
+		if(i >= PATH_MAX) {
 			pm_printf(PM_LOG_ERROR, _("buffer overflow detected in arg parsing\n"));
 			cleanup(EXIT_FAILURE);
 		}
@@ -1433,7 +1446,7 @@ int main(int argc, char *argv[])
 			line[i] = '\0';
 			pm_targets = alpm_list_add(pm_targets, strdup(line));
 		}
-		if (!freopen(ctermid(NULL), "r", stdin)) {
+		if(!freopen(ctermid(NULL), "r", stdin)) {
 			pm_printf(PM_LOG_ERROR, _("failed to reopen stdin for reading: (%s)\n"),
 					strerror(errno));
 		}
@@ -1479,7 +1492,7 @@ int main(int argc, char *argv[])
 		printf("DB Path   : %s\n", alpm_option_get_dbpath());
 		printf("Cache Dirs: ");
 		for(i = alpm_option_get_cachedirs(); i; i = alpm_list_next(i)) {
-			printf("%s  ", (char*)alpm_list_getdata(i));
+			printf("%s  ", (char *)alpm_list_getdata(i));
 		}
 		printf("\n");
 		printf("Lock File : %s\n", alpm_option_get_lockfile());

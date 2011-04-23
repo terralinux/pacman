@@ -71,7 +71,7 @@ static alpm_list_t *mount_point_list(void)
 
 	fp = setmntent(MOUNTED, "r");
 
-	if (fp == NULL) {
+	if(fp == NULL) {
 		return NULL;
 	}
 
@@ -103,7 +103,7 @@ static alpm_list_t *mount_point_list(void)
 
 	entries = getmntinfo(&fsp, MNT_NOWAIT);
 
-	if (entries < 0) {
+	if(entries < 0) {
 		return NULL;
 	}
 
@@ -112,9 +112,9 @@ static alpm_list_t *mount_point_list(void)
 		mp->mount_dir = strdup(fsp->f_mntonname);
 		mp->mount_dir_len = strlen(mp->mount_dir);
 		memcpy(&(mp->fsp), fsp, sizeof(FSSTATSTYPE));
-#if defined HAVE_STRUCT_STATVFS_F_FLAG
+#if defined(HAVE_GETMNTINFO_STATVFS) && defined(HAVE_STRUCT_STATVFS_F_FLAG)
 		mp->read_only = fsp->f_flag & ST_RDONLY;
-#elif defined HAVE_STRUCT_STATFS_F_FLAGS
+#elif defined(HAVE_GETMNTINFO_STATFS) && defined(HAVE_STRUCT_STATFS_F_FLAGS)
 		mp->read_only = fsp->f_flags & MNT_RDONLY;
 #endif
 
@@ -192,7 +192,7 @@ static int calculate_installed_size(const alpm_list_t *mount_points,
 	struct archive *archive;
 	struct archive_entry *entry;
 
-	if ((archive = archive_read_new()) == NULL) {
+	if((archive = archive_read_new()) == NULL) {
 		pm_errno = PM_ERR_LIBARCHIVE;
 		ret = -1;
 		goto cleanup;

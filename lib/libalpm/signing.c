@@ -109,7 +109,7 @@ int _alpm_gpgme_checksig(const char *path, const pmpgpsig_t *sig)
 
 	ALPM_LOG_FUNC;
 
-	if(!sig || !sig->rawdata) {
+	if(!sig || !sig->data) {
 		 RET_ERR(PM_ERR_SIG_UNKNOWN, -1);
 	}
 	if(!path || access(path, R_OK) != 0) {
@@ -140,7 +140,7 @@ int _alpm_gpgme_checksig(const char *path, const pmpgpsig_t *sig)
 	CHECK_ERR();
 
 	/* next create data object for the signature */
-	err = gpgme_data_new_from_mem(&sigdata, (char*)sig->rawdata, sig->rawlen, 0);
+	err = gpgme_data_new_from_mem(&sigdata, (char *)sig->data, sig->len, 0);
 	CHECK_ERR();
 
 	/* here's where the magic happens */
@@ -148,7 +148,7 @@ int _alpm_gpgme_checksig(const char *path, const pmpgpsig_t *sig)
 	CHECK_ERR();
 	result = gpgme_op_verify_result(ctx);
 	gpgsig = result->signatures;
-	if (!gpgsig || gpgsig->next) {
+	if(!gpgsig || gpgsig->next) {
 		_alpm_log(PM_LOG_ERROR, _("Unexpected number of signatures\n"));
 		ret = -1;
 		goto error;
@@ -210,48 +210,70 @@ error:
  *
  * @return 0 on success, 1 on file not found, -1 on error
  */
-int _alpm_load_signature(const char *sigfile, pmpgpsig_t *pgpsig) {
+int _alpm_load_signature(const char *file, pmpgpsig_t *pgpsig) {
 	struct stat st;
+	char *sigfile;
+	int ret = -1;
+
+	/* look around for a PGP signature file; load if available */
+	MALLOC(sigfile, strlen(file) + 5, RET_ERR(PM_ERR_MEMORY, -1));
+	sprintf(sigfile, "%s.sig", file);
 
 	if(access(sigfile, R_OK) == 0 && stat(sigfile, &st) == 0) {
 		FILE *f;
 		size_t bytes_read;
 
-		if(st.st_size > 4096) {
-			return -1;
+		if(st.st_size > 4096 || (f = fopen(sigfile, "rb")) == NULL) {
+			free(sigfile);
+			return ret;
 		}
-
-		if((f = fopen(sigfile, "rb")) == NULL) {
-			return -1;
-		}
-		CALLOC(pgpsig->rawdata, st.st_size, sizeof(unsigned char),
+		CALLOC(pgpsig->data, st.st_size, sizeof(unsigned char),
 				RET_ERR(PM_ERR_MEMORY, -1));
-		bytes_read = fread(pgpsig->rawdata, sizeof(char), st.st_size, f);
+		bytes_read = fread(pgpsig->data, sizeof(char), st.st_size, f);
 		if(bytes_read == (size_t)st.st_size) {
-			pgpsig->rawlen = bytes_read;
+			pgpsig->len = bytes_read;
 			_alpm_log(PM_LOG_DEBUG, "loaded gpg signature file, location %s\n",
 					sigfile);
+			ret = 0;
 		} else {
 			_alpm_log(PM_LOG_WARNING, _("Failed reading PGP signature file %s"),
 					sigfile);
-			FREE(pgpsig->rawdata);
-			return -1;
+			FREE(pgpsig->data);
 		}
 
 		fclose(f);
 	} else {
 		_alpm_log(PM_LOG_DEBUG, "signature file %s not found\n", sigfile);
 		/* not fatal...we return a different error code here */
-		return 1;
+		ret = 1;
 	}
 
-	return 0;
+	free(sigfile);
+	return ret;
+}
+
+/**
+ * Determines the necessity of checking for a valid PGP signature
+ * @param db the sync database to query
+ *
+ * @return signature verification level
+ */
+pgp_verify_t _alpm_db_get_sigverify_level(pmdb_t *db)
+{
+	ALPM_LOG_FUNC;
+	ASSERT(db != NULL, RET_ERR(PM_ERR_DB_NULL, PM_PGP_VERIFY_UNKNOWN));
+
+	if(db->pgp_verify != PM_PGP_VERIFY_UNKNOWN) {
+		return db->pgp_verify;
+	} else {
+		return alpm_option_get_default_sigverify();
+	}
 }
 
 /**
  * Check the PGP package signature for the given package file.
  * @param pkg the package to check
- * @return a int value : 0 (valid), 1 (invalid), -1 (an error occured)
+ * @return a int value : 0 (valid), 1 (invalid), -1 (an error occurred)
  */
 int SYMEXPORT alpm_pkg_check_pgp_signature(pmpkg_t *pkg)
 {
@@ -265,16 +287,15 @@ int SYMEXPORT alpm_pkg_check_pgp_signature(pmpkg_t *pkg)
 /**
  * Check the PGP package signature for the given database.
  * @param db the database to check
- * @return a int value : 0 (valid), 1 (invalid), -1 (an error occured)
+ * @return a int value : 0 (valid), 1 (invalid), -1 (an error occurred)
  */
 int SYMEXPORT alpm_db_check_pgp_signature(pmdb_t *db)
 {
 	ALPM_LOG_FUNC;
-	ASSERT(db != NULL, return(0));
+	ASSERT(db != NULL, return 0);
 
 	return _alpm_gpgme_checksig(_alpm_db_path(db),
 			_alpm_db_pgpsig(db));
 }
-
 
 /* vim: set ts=2 sw=2 noet: */

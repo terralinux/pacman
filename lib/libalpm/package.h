@@ -24,6 +24,8 @@
 #ifndef _ALPM_PACKAGE_H
 #define _ALPM_PACKAGE_H
 
+#include "config.h" /* ensure off_t is correct length */
+
 #include <sys/types.h> /* off_t */
 #include <time.h> /* time_t */
 
@@ -46,8 +48,6 @@ typedef enum _pmpkgfrom_t {
  */
 struct pkg_operations {
 	const char *(*get_filename) (pmpkg_t *);
-	const char *(*get_name) (pmpkg_t *);
-	const char *(*get_version) (pmpkg_t *);
 	const char *(*get_desc) (pmpkg_t *);
 	const char *(*get_url) (pmpkg_t *);
 	time_t (*get_builddate) (pmpkg_t *);

@@ -28,7 +28,7 @@
 # makepkg uses quite a few external programs during its execution. You
 # need to have at least the following installed for makepkg to function:
 #   awk, bsdtar (libarchive), bzip2, coreutils, fakeroot, file, find (findutils),
-#   gettext, grep, gzip, openssl, sed, tput (ncurses), xz
+#   gettext, gpg, grep, gzip, openssl, sed, tput (ncurses), xz
 
 # gettext initialization
 export TEXTDOMAIN='pacman'
@@ -75,6 +75,7 @@ CHECKFUNC=0
 PKGFUNC=0
 SPLITPKG=0
 PKGLIST=()
+SIGNPKG=''
 
 # Forces the pkgver of the current PKGBUILD. Used by the fakeroot call
 # when dealing with svn/cvs/etc PKGBUILDs.
@@ -286,11 +287,10 @@ check_buildenv() {
 #          ? - not found
 ##
 in_opt_array() {
-	local needle=$(tr '[:upper:]' '[:lower:]' <<< $1); shift
+	local needle=$1; shift
 
 	local opt
 	for opt in "$@"; do
-		opt=$(tr '[:upper:]' '[:lower:]' <<< $opt)
 		if [[ $opt = $needle ]]; then
 			echo 'y' # Enabled
 			return
@@ -395,7 +395,7 @@ run_pacman() {
 		if type -p sudo >/dev/null; then
 			cmd="sudo $cmd"
 		else
-			cmd="su -c '$cmd'"
+			cmd="su root -c '$cmd'"
 		fi
 	fi
 	eval "$cmd"
@@ -578,7 +578,6 @@ generate_checksums() {
 
 	local integ
 	for integ in ${integlist[@]}; do
-		integ=$(tr '[:upper:]' '[:lower:]' <<< "$integ")
 		case "$integ" in
 			md5|sha1|sha256|sha384|sha512) : ;;
 			*)
@@ -1039,13 +1038,12 @@ create_package() {
 	local comp_files=".PKGINFO"
 
 	# check for changelog/install files
-	for i in 'changelog' 'install'; do
-		orig=${!i}
-		dest=$(tr '[:lower:]' '[:upper:]' <<<".$i")
+	for i in 'changelog/.CHANGELOG' 'install/.INSTALL'; do
+		IFS='/' read -r orig dest <<< "$i"
 
-		if [[ -n $orig ]]; then
-			msg2 "$(gettext "Adding %s file...")" "$i"
-			cp "$startdir/$orig" "$dest"
+		if [[ -n ${!orig} ]]; then
+			msg2 "$(gettext "Adding %s file...")" "$orig"
+			cp "$startdir/${!orig}" "$dest"
 			chmod 644 "$dest"
 			comp_files+=" $dest"
 		fi
@@ -1106,7 +1104,7 @@ create_package() {
 }
 
 create_signature() {
-	if [[ $(check_buildenv sign) != "y" ]]; then
+	if [[ $SIGNPKG != 'y' ]]; then
 		return
 	fi
 	local ret=0
@@ -1116,7 +1114,15 @@ create_signature() {
 		error "$(gettext "Cannot find the gpg binary! Is gnupg installed?")"
 		exit 1 # $E_MISSING_PROGRAM
 	fi
-	gpg --detach-sign --use-agent "$filename" || ret=$?
+
+	local SIGNWITHKEY=""
+	if [[ -n $GPGKEY ]]; then
+		SIGNWITHKEY="-u ${GPGKEY}"
+	fi
+	# The signature will be generated directly in ascii-friendly format
+	gpg --detach-sign --use-agent ${SIGNWITHKEY} "$filename" &>/dev/null || ret=$?
+
+
 	if (( ! ret )); then
 		msg2 "$(gettext "Created signature file %s.")" "$filename.sig"
 	else
@@ -1284,7 +1290,7 @@ check_sanity() {
 
 	local provides_list=()
 	eval $(awk '/^[[:space:]]*provides=/,/\)/' "$BUILDFILE" | \
-		sed -e "s/provides=/provides_list+=/" -e "s/#.*//")
+		sed -e "s/provides=/provides_list+=/" -e "s/#.*//" -e 's/\\$//')
 	for i in ${provides_list[@]}; do
 		if [[ $i != ${i//</} || $i != ${i//>/} ]]; then
 			error "$(gettext "Provides array cannot contain comparison (< or >) operators.")"
@@ -1294,7 +1300,7 @@ check_sanity() {
 
 	local backup_list=()
 	eval $(awk '/^[[:space:]]*backup=/,/\)/' "$BUILDFILE" | \
-		sed -e "s/backup=/backup_list+=/" -e "s/#.*//")
+		sed -e "s/backup=/backup_list+=/" -e "s/#.*//" -e 's/\\$//')
 	for i in "${backup_list[@]}"; do
 		if [[ ${i:0:1} = "/" ]]; then
 			error "$(gettext "Backup entry should not contain leading slash : %s")" "$i"
@@ -1303,8 +1309,8 @@ check_sanity() {
 	done
 
 	local optdepends_list=()
-	eval $(awk '/^[[:space:]]*optdepends=\(/,/\)[[:space:]]*(|#.*)$/' "$BUILDFILE" | \
-		sed -e "s/optdepends=/optdepends_list+=/" -e "s/#.*//")
+	eval $(awk '/^[[:space:]]*optdepends=\(/,/\)[[:space:]]*(#.*)?$/' "$BUILDFILE" | \
+		sed -e "s/optdepends=/optdepends_list+=/" -e "s/#.*//" -e 's/\\$//')
 	for i in "${optdepends_list[@]}"; do
 		local pkg=${i%%:*}
 		if [[ ! $pkg =~ ^[[:alnum:]\>\<\=\.\+\_\-]+$ ]]; then
@@ -1329,7 +1335,7 @@ check_sanity() {
 	local valid_options=1
 	local known kopt options_list
 	eval $(awk '/^[[:space:]]*options=/,/\)/' "$BUILDFILE" | \
-		sed -e "s/options=/options_list+=/" -e "s/#.*//")
+		sed -e "s/options=/options_list+=/" -e "s/#.*//" -e 's/\\$//')
 	for i in ${options_list[@]}; do
 		known=0
 		# check if option matches a known option or its inverse
@@ -1601,7 +1607,7 @@ usage() {
 	echo "$(gettext "  -e, --noextract  Do not extract source files (use existing src/ dir)")"
 	echo "$(gettext "  -f, --force      Overwrite existing package")"
 	echo "$(gettext "  -g, --geninteg   Generate integrity checks for source files")"
-	echo "$(gettext "  -h, --help       This help")"
+	echo "$(gettext "  -h, --help       Show this help message and exit")"
 	echo "$(gettext "  -i, --install    Install package after successful build")"
 	echo "$(gettext "  -L, --log        Log package build process")"
 	echo "$(gettext "  -m, --nocolor    Disable colorized output messages")"
@@ -1615,8 +1621,11 @@ usage() {
 	printf "$(gettext "  --check          Run the check() function in the %s")\n" "$BUILDSCRIPT"
 	printf "$(gettext "  --config <file>  Use an alternate config file (instead of '%s')")\n" "$confdir/makepkg.conf"
 	printf "$(gettext "  --holdver        Prevent automatic version bumping for development %ss")\n" "$BUILDSCRIPT"
+	echo "$(gettext "  --key <key>      Specify a key to use for gpg signing instead of the default")"
 	printf "$(gettext "  --nocheck        Do not run the check() function in the %s")\n" "$BUILDSCRIPT"
+	echo "$(gettext "  --nosign         Do not create a signature for the package")"
 	echo "$(gettext "  --pkg <list>     Only build listed packages from a split package")"
+	echo "$(gettext "  --sign           Sign the resulting package with gpg")"
 	echo "$(gettext "  --skipinteg      Do not fail when integrity checks are missing")"
 	echo "$(gettext "  --source         Generate a source-only tarball without downloaded sources")"
 	echo
@@ -1653,8 +1662,8 @@ ARGLIST=("$@")
 OPT_SHORT="AcCdefFghiLmop:rRsV"
 OPT_LONG="allsource,asroot,ignorearch,check,clean,cleancache,nodeps"
 OPT_LONG+=",noextract,force,forcever:,geninteg,help,holdver"
-OPT_LONG+=",install,log,nocolor,nobuild,nocheck,pkg:,rmdeps"
-OPT_LONG+=",repackage,skipinteg,source,syncdeps,version,config:"
+OPT_LONG+=",install,key:,log,nocolor,nobuild,nocheck,nosign,pkg:,rmdeps"
+OPT_LONG+=",repackage,skipinteg,sign,source,syncdeps,version,config:"
 # Pacman Options
 OPT_LONG+=",noconfirm,noprogressbar"
 OPT_TEMP="$(parse_options $OPT_SHORT $OPT_LONG "$@" || echo 'PARSE_OPTIONS FAILED')"
@@ -1688,15 +1697,18 @@ while true; do
 		-g|--geninteg)    GENINTEG=1 ;;
 		--holdver)        HOLDVER=1 ;;
 		-i|--install)     INSTALL=1 ;;
+		--key)            shift; GPGKEY=$1 ;;
 		-L|--log)         LOGGING=1 ;;
 		-m|--nocolor)     USE_COLOR='n' ;;
 		--nocheck)        RUN_CHECK='n' ;;
+		--nosign)         SIGNPKG='n' ;;
 		-o|--nobuild)     NOBUILD=1 ;;
 		-p)               shift; BUILDFILE=$1 ;;
 		--pkg)            shift; PKGLIST=($1) ;;
 		-r|--rmdeps)      RMDEPS=1 ;;
 		-R|--repackage)   REPKG=1 ;;
 		--skipinteg)      SKIPINTEG=1 ;;
+		--sign)           SIGNPKG='y' ;;
 		--source)         SOURCEONLY=1 ;;
 		-s|--syncdeps)    DEP_BIN=1 ;;
 
@@ -1715,6 +1727,7 @@ done
 [[ -n ${SRCPKGDEST} ]] && _SRCPKGDEST=$(canonicalize_path ${SRCPKGDEST})
 [[ -n ${PKGEXT} ]] && _PKGEXT=${PKGEXT}
 [[ -n ${SRCEXT} ]] && _SRCEXT=${SRCEXT}
+[[ -n ${GPGKEY} ]] && _GPGKEY=${GPGKEY}
 
 # default config is makepkg.conf
 MAKEPKG_CONF=${MAKEPKG_CONF:-$confdir/makepkg.conf}
@@ -1780,6 +1793,7 @@ SRCPKGDEST=${SRCPKGDEST:-$startdir} #default to $startdir if undefined
 
 PKGEXT=${_PKGEXT:-$PKGEXT}
 SRCEXT=${_SRCEXT:-$SRCEXT}
+GPGKEY=${_GPGKEY:-$GPGKEY}
 
 if (( HOLDVER )) && [[ -n $FORCE_VER ]]; then
 	# The '\\0' is here to prevent gettext from thinking --holdver is an option
@@ -1930,6 +1944,22 @@ if [[ -n "${PKGLIST[@]}" ]]; then
 	unset pkgname
 	pkgname=("${PKGLIST[@]}")
 fi
+
+# check if gpg signature is to be created and if signing key is valid
+if [[ -z "$SIGNPKG" && $(check_buildenv sign) == 'y' ]]; then
+  SIGNPKG='y'
+fi
+if [[ $SIGNPKG == 'y' ]]; then
+	if ! gpg --list-key ${GPGKEY} &>/dev/null; then
+		if [[ ! -z $GPGKEY ]]; then
+			error "$(gettext "The key ${GPGKEY} does not exist in your keyring.")"
+		else
+			error "$(gettext "There is no key in your keyring.")"
+		fi
+		exit 1
+	fi
+fi
+
 
 if (( ! SPLITPKG )); then
 	fullver=$(get_full_version $epoch $pkgver $pkgrel)

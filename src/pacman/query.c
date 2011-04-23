@@ -26,7 +26,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <errno.h>
-#include <unistd.h>
 
 #include <alpm.h>
 #include <alpm_list.h>
@@ -60,16 +59,16 @@ static int search_path(char **filename, struct stat *bufptr)
 	char *envpath, *envpathsplit, *path, *fullname;
 	size_t flen;
 
-	if ((envpath = getenv("PATH")) == NULL) {
+	if((envpath = getenv("PATH")) == NULL) {
 		return -1;
 	}
-	if ((envpath = envpathsplit = strdup(envpath)) == NULL) {
+	if((envpath = envpathsplit = strdup(envpath)) == NULL) {
 		return -1;
 	}
 
 	flen = strlen(*filename);
 
-	while ((path = strsep(&envpathsplit, ":")) != NULL) {
+	while((path = strsep(&envpathsplit, ":")) != NULL) {
 		size_t plen = strlen(path);
 
 		/* strip the trailing slash if one exists */
@@ -90,6 +89,16 @@ static int search_path(char **filename, struct stat *bufptr)
 	}
 	free(envpath);
 	return -1;
+}
+
+static void print_query_fileowner(const char *filename, pmpkg_t *info)
+{
+	if(!config->quiet) {
+		printf(_("%s is owned by %s %s\n"), filename,
+				alpm_pkg_get_name(info), alpm_pkg_get_version(info));
+	} else {
+		printf("%s\n", alpm_pkg_get_name(info));
+	}
 }
 
 static int query_fileowner(alpm_list_t *targets)
@@ -156,17 +165,21 @@ static int query_fileowner(alpm_list_t *targets)
 
 		bname = mbasename(filename);
 		dname = mdirname(filename);
-		rpath = resolve_path(dname);
+		/* for files in '/', there is no directory name to match */
+		if(strcmp(dname, "") == 0) {
+			rpath = NULL;
+		} else {
+			rpath = resolve_path(dname);
 
-		/* this odd conditional is to ensure files in '/' can be checked */
-		if(!rpath && strcmp(dname, "") != 0) {
-			pm_fprintf(stderr, PM_LOG_ERROR, _("cannot determine real path for '%s': %s\n"),
-					filename, strerror(errno));
-			free(filename);
-			free(dname);
-			free(rpath);
-			ret++;
-			continue;
+			if(!rpath) {
+				pm_fprintf(stderr, PM_LOG_ERROR, _("cannot determine real path for '%s': %s\n"),
+						filename, strerror(errno));
+				free(filename);
+				free(dname);
+				free(rpath);
+				ret++;
+				continue;
+			}
 		}
 		free(dname);
 
@@ -183,6 +196,13 @@ static int query_fileowner(alpm_list_t *targets)
 					continue;
 				}
 
+				/* for files in '/', there is no directory name to match */
+				if(!rpath) {
+					print_query_fileowner(filename, info);
+					found = 1;
+					continue;
+				}
+
 				if(strlen(pkgfile) > max_length) {
 					pm_fprintf(stderr, PM_LOG_ERROR, _("path too long: %s%s\n"), root, pkgfile);
 				}
@@ -194,12 +214,7 @@ static int query_fileowner(alpm_list_t *targets)
 				free(pdname);
 
 				if(ppath && strcmp(ppath, rpath) == 0) {
-					if (!config->quiet) {
-						printf(_("%s is owned by %s %s\n"), filename,
-								alpm_pkg_get_name(info), alpm_pkg_get_version(info));
-					} else {
-						printf("%s\n", alpm_pkg_get_name(info));
-					}
+					print_query_fileowner(filename, info);
 					found = 1;
 				}
 				free(ppath);
@@ -239,22 +254,14 @@ static int query_search(alpm_list_t *targets)
 		alpm_list_t *grp;
 		pmpkg_t *pkg = alpm_list_getdata(i);
 
-		if (!config->quiet) {
+		if(!config->quiet) {
 			printf("local/%s %s", alpm_pkg_get_name(pkg), alpm_pkg_get_version(pkg));
 		} else {
 			printf("%s", alpm_pkg_get_name(pkg));
 		}
 
-		/* print the package size with the output if ShowSize option set */
-		if(!config->quiet && config->showsize) {
-			/* Convert byte size to MB */
-			double mbsize = (double)alpm_pkg_get_size(pkg) / (1024.0 * 1024.0);
 
-			printf(" [%.2f MB]", mbsize);
-		}
-
-
-		if (!config->quiet) {
+		if(!config->quiet) {
 			if((grp = alpm_pkg_get_groups(pkg)) != NULL) {
 				alpm_list_t *k;
 				printf(" (");
@@ -460,7 +467,7 @@ static int display(pmpkg_t *pkg)
 	}
 	if(!config->op_q_info && !config->op_q_list
 			&& !config->op_q_changelog && !config->op_q_check) {
-		if (!config->quiet) {
+		if(!config->quiet) {
 			printf("%s %s\n", alpm_pkg_get_name(pkg), alpm_pkg_get_version(pkg));
 		} else {
 			printf("%s\n", alpm_pkg_get_name(pkg));

@@ -28,8 +28,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/statvfs.h>
 #include <errno.h>
 #include <limits.h>
 #include <fcntl.h>
@@ -41,11 +39,9 @@
 #include "util.h"
 #include "log.h"
 #include "handle.h"
-#include "add.h"
 #include "remove.h"
 #include "sync.h"
 #include "alpm.h"
-#include "deps.h"
 
 /** \addtogroup alpm_trans Transaction Functions
  * @brief Functions to manipulate libalpm transactions
@@ -72,7 +68,7 @@ static int make_lock(pmhandle_t *handle)
 
 	do {
 		fd = open(handle->lockfile, O_WRONLY | O_CREAT | O_EXCL, 0000);
-	} while (fd == -1 && errno == EINTR);
+	} while(fd == -1 && errno == EINTR);
 	if(fd > 0) {
 		FILE *f = fdopen(fd, "w");
 		fprintf(f, "%ld\n", (long)getpid());
@@ -97,13 +93,7 @@ static int remove_lock(pmhandle_t *handle)
 	return 0;
 }
 
-/** Initialize the transaction.
- * @param flags flags of the transaction (like nodeps, etc)
- * @param event event callback function pointer
- * @param conv question callback function pointer
- * @param progress progress callback function pointer
- * @return 0 on success, -1 on error (pm_errno is set accordingly)
- */
+/** Initialize the transaction. */
 int SYMEXPORT alpm_trans_init(pmtransflag_t flags,
 		alpm_trans_cb_event event, alpm_trans_cb_conv conv,
 		alpm_trans_cb_progress progress)
@@ -176,11 +166,7 @@ static alpm_list_t *check_arch(alpm_list_t *pkgs)
 	return invalid;
 }
 
-/** Prepare a transaction.
- * @param data the address of an alpm_list where detailed description
- * of an error can be dumped (ie. list of conflicting files)
- * @return 0 on success, -1 on error (pm_errno is set accordingly)
- */
+/** Prepare a transaction. */
 int SYMEXPORT alpm_trans_prepare(alpm_list_t **data)
 {
 	pmtrans_t *trans;
@@ -226,11 +212,7 @@ int SYMEXPORT alpm_trans_prepare(alpm_list_t **data)
 	return 0;
 }
 
-/** Commit a transaction.
- * @param data the address of an alpm_list where detailed description
- * of an error can be dumped (ie. list of conflicting files)
- * @return 0 on success, -1 on error (pm_errno is set accordingly)
- */
+/** Commit a transaction. */
 int SYMEXPORT alpm_trans_commit(alpm_list_t **data)
 {
 	pmtrans_t *trans;
@@ -271,9 +253,7 @@ int SYMEXPORT alpm_trans_commit(alpm_list_t **data)
 	return 0;
 }
 
-/** Interrupt a transaction.
- * @return 0 on success, -1 on error (pm_errno is set accordingly)
- */
+/** Interrupt a transaction. */
 int SYMEXPORT alpm_trans_interrupt(void)
 {
 	pmtrans_t *trans;
@@ -293,9 +273,7 @@ int SYMEXPORT alpm_trans_interrupt(void)
 	return 0;
 }
 
-/** Release a transaction.
- * @return 0 on success, -1 on error (pm_errno is set accordingly)
- */
+/** Release a transaction. */
 int SYMEXPORT alpm_trans_release(void)
 {
 	pmtrans_t *trans;
@@ -465,8 +443,8 @@ cleanup:
 int SYMEXPORT alpm_trans_get_flags()
 {
 	/* Sanity checks */
-	ASSERT(handle != NULL, return -1);
-	ASSERT(handle->trans != NULL, return -1);
+	ASSERT(handle != NULL, RET_ERR(PM_ERR_HANDLE_NULL, -1));
+	ASSERT(handle->trans != NULL, RET_ERR(PM_ERR_TRANS_NULL, -1));
 
 	return handle->trans->flags;
 }

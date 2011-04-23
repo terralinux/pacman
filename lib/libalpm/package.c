@@ -23,13 +23,9 @@
 
 #include "config.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-#include <errno.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 
 /* libalpm */
 #include "package.h"
@@ -47,10 +43,7 @@
  * @{
  */
 
-/** Free a package.
- * @param pkg package pointer to free
- * @return 0 on success, -1 on error (pm_errno is set accordingly)
- */
+/** Free a package. */
 int SYMEXPORT alpm_pkg_free(pmpkg_t *pkg)
 {
 	ALPM_LOG_FUNC;
@@ -65,10 +58,7 @@ int SYMEXPORT alpm_pkg_free(pmpkg_t *pkg)
 	return 0;
 }
 
-/** Check the integrity (with md5) of a package from the sync cache.
- * @param pkg package pointer
- * @return 0 on success, -1 on error (pm_errno is set accordingly)
- */
+/** Check the integrity (with md5) of a package from the sync cache. */
 int SYMEXPORT alpm_pkg_checkmd5sum(pmpkg_t *pkg)
 {
 	char *fpath;
@@ -86,7 +76,7 @@ int SYMEXPORT alpm_pkg_checkmd5sum(pmpkg_t *pkg)
 
 	if(retval == 0) {
 		return 0;
-	} else if (retval == 1) {
+	} else if(retval == 1) {
 		pm_errno = PM_ERR_PKG_INVALID;
 		retval = -1;
 	}
@@ -99,8 +89,6 @@ int SYMEXPORT alpm_pkg_checkmd5sum(pmpkg_t *pkg)
  * a lazy-load cache. However, the defaults will work just fine for fully-
  * populated package structures. */
 static const char *_pkg_get_filename(pmpkg_t *pkg)    { return pkg->filename; }
-static const char *_pkg_get_name(pmpkg_t *pkg)        { return pkg->name; }
-static const char *_pkg_get_version(pmpkg_t *pkg)     { return pkg->version; }
 static const char *_pkg_get_desc(pmpkg_t *pkg)        { return pkg->desc; }
 static const char *_pkg_get_url(pmpkg_t *pkg)         { return pkg->url; }
 static time_t _pkg_get_builddate(pmpkg_t *pkg)        { return pkg->builddate; }
@@ -124,13 +112,15 @@ static alpm_list_t *_pkg_get_deltas(pmpkg_t *pkg)     { return pkg->deltas; }
 static alpm_list_t *_pkg_get_files(pmpkg_t *pkg)      { return pkg->files; }
 static alpm_list_t *_pkg_get_backup(pmpkg_t *pkg)     { return pkg->backup; }
 
+static void *_pkg_changelog_open(pmpkg_t *pkg)        { return NULL; }
+static size_t _pkg_changelog_read(void *ptr, size_t size, const pmpkg_t *pkg, const void *fp) { return 0; }
+static int _pkg_changelog_close(const pmpkg_t *pkg, void *fp) { return EOF; }
+
 /** The standard package operations struct. Get fields directly from the
  * struct itself with no abstraction layer or any type of lazy loading.
  */
 struct pkg_operations default_pkg_ops = {
 	.get_filename    = _pkg_get_filename,
-	.get_name        = _pkg_get_name,
-	.get_version     = _pkg_get_version,
 	.get_desc        = _pkg_get_desc,
 	.get_url         = _pkg_get_url,
 	.get_builddate   = _pkg_get_builddate,
@@ -142,6 +132,7 @@ struct pkg_operations default_pkg_ops = {
 	.get_isize       = _pkg_get_isize,
 	.get_reason      = _pkg_get_reason,
 	.has_scriptlet   = _pkg_has_scriptlet,
+
 	.get_licenses    = _pkg_get_licenses,
 	.get_groups      = _pkg_get_groups,
 	.get_depends     = _pkg_get_depends,
@@ -152,6 +143,10 @@ struct pkg_operations default_pkg_ops = {
 	.get_deltas      = _pkg_get_deltas,
 	.get_files       = _pkg_get_files,
 	.get_backup      = _pkg_get_backup,
+
+	.changelog_open  = _pkg_changelog_open,
+	.changelog_read  = _pkg_changelog_read,
+	.changelog_close = _pkg_changelog_close,
 };
 
 /* Public functions for getting package information. These functions
@@ -164,12 +159,12 @@ const char SYMEXPORT *alpm_pkg_get_filename(pmpkg_t *pkg)
 
 const char SYMEXPORT *alpm_pkg_get_name(pmpkg_t *pkg)
 {
-	return pkg->ops->get_name(pkg);
+	return pkg->name;
 }
 
 const char SYMEXPORT *alpm_pkg_get_version(pmpkg_t *pkg)
 {
-	return pkg->ops->get_version(pkg);
+	return pkg->version;
 }
 
 const char SYMEXPORT *alpm_pkg_get_desc(pmpkg_t *pkg)
@@ -203,25 +198,26 @@ const char SYMEXPORT *alpm_pkg_get_md5sum(pmpkg_t *pkg)
 }
 
 static int decode_pgpsig(pmpkg_t *pkg) {
-	int len = strlen(pkg->pgpsig.encdata);
-	const unsigned char *usline = (const unsigned char*)pkg->pgpsig.encdata;
-	int destlen = 0;
+	const int len = strlen(pkg->pgpsig.base64_data);
+	const unsigned char *usline = (const unsigned char *)pkg->pgpsig.base64_data;
+	int ret, destlen = 0;
 	/* get the necessary size for the buffer by passing 0 */
-	int ret = base64_decode(NULL, &destlen, usline, len);
+	ret = base64_decode(NULL, &destlen, usline, len);
 	/* alloc our memory and repeat the call to decode */
-	MALLOC(pkg->pgpsig.rawdata, (size_t)destlen, goto error);
-	ret = base64_decode(pkg->pgpsig.rawdata, &destlen, usline, len);
-	pkg->pgpsig.rawlen = destlen;
+	MALLOC(pkg->pgpsig.data, (size_t)destlen, goto error);
+	ret = base64_decode(pkg->pgpsig.data, &destlen, usline, len);
+	pkg->pgpsig.len = destlen;
 	if(ret != 0) {
 		goto error;
 	}
 
-	FREE(pkg->pgpsig.encdata);
+	/* we no longer have a need for this */
+	FREE(pkg->pgpsig.base64_data);
 	return 0;
 
 error:
-	FREE(pkg->pgpsig.rawdata);
-	pkg->pgpsig.rawlen = 0;
+	FREE(pkg->pgpsig.data);
+	pkg->pgpsig.len = 0;
 	return 1;
 }
 
@@ -232,7 +228,7 @@ const pmpgpsig_t SYMEXPORT *alpm_pkg_get_pgpsig(pmpkg_t *pkg)
 	/* Sanity checks */
 	ASSERT(pkg != NULL, RET_ERR(PM_ERR_WRONG_ARGS, NULL));
 
-	if(pkg->pgpsig.rawdata == NULL && pkg->pgpsig.encdata != NULL) {
+	if(pkg->pgpsig.data == NULL && pkg->pgpsig.base64_data != NULL) {
 		decode_pgpsig(pkg);
 	}
 	return &(pkg->pgpsig);
@@ -317,30 +313,13 @@ pmdb_t SYMEXPORT *alpm_pkg_get_db(pmpkg_t *pkg)
 	return pkg->origin_data.db;
 }
 
-/**
- * Open a package changelog for reading. Similar to fopen in functionality,
- * except that the returned 'file stream' could really be from an archive
- * as well as from the database.
- * @param pkg the package to read the changelog of (either file or db)
- * @return a 'file stream' to the package changelog
- */
+/** Open a package changelog for reading. */
 void SYMEXPORT *alpm_pkg_changelog_open(pmpkg_t *pkg)
 {
 	return pkg->ops->changelog_open(pkg);
 }
 
-/**
- * Read data from an open changelog 'file stream'. Similar to fread in
- * functionality, this function takes a buffer and amount of data to read. If an
- * error occurs pm_errno will be set.
- *
- * @param ptr a buffer to fill with raw changelog data
- * @param size the size of the buffer
- * @param pkg the package that the changelog is being read from
- * @param fp a 'file stream' to the package changelog
- * @return the number of characters read, or 0 if there is no more data or an
- * error occurred.
- */
+/** Read data from an open changelog 'file stream'. */
 size_t SYMEXPORT alpm_pkg_changelog_read(void *ptr, size_t size,
 		const pmpkg_t *pkg, const void *fp)
 {
@@ -354,14 +333,7 @@ int SYMEXPORT alpm_pkg_changelog_feof(const pmpkg_t *pkg, void *fp)
 }
 */
 
-/**
- * Close a package changelog for reading. Similar to fclose in functionality,
- * except that the 'file stream' could really be from an archive as well as
- * from the database.
- * @param pkg the package that the changelog was read from
- * @param fp a 'file stream' to the package changelog
- * @return whether closing the package changelog stream was successful
- */
+/** Close a package changelog for reading. */
 int SYMEXPORT alpm_pkg_changelog_close(const pmpkg_t *pkg, void *fp)
 {
 	return pkg->ops->changelog_close(pkg, fp);
@@ -389,11 +361,7 @@ static void find_requiredby(pmpkg_t *pkg, pmdb_t *db, alpm_list_t **reqs)
 	}
 }
 
-/**
- * @brief Compute the packages requiring a given package.
- * @param pkg a package
- * @return the list of packages requiring pkg
- */
+/** Compute the packages requiring a given package. */
 alpm_list_t SYMEXPORT *alpm_pkg_compute_requiredby(pmpkg_t *pkg)
 {
 	const alpm_list_t *i;
@@ -500,8 +468,8 @@ void _alpm_pkg_free(pmpkg_t *pkg)
 	FREE(pkg->url);
 	FREE(pkg->packager);
 	FREE(pkg->md5sum);
-	FREE(pkg->pgpsig.encdata);
-	FREE(pkg->pgpsig.rawdata);
+	FREE(pkg->pgpsig.base64_data);
+	FREE(pkg->pgpsig.data);
 	FREE(pkg->arch);
 	FREELIST(pkg->licenses);
 	FREELIST(pkg->replaces);

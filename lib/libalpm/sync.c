@@ -26,11 +26,9 @@
 #include <sys/types.h> /* off_t */
 #include <stdlib.h>
 #include <stdio.h>
-#include <fcntl.h>
 #include <string.h>
 #include <stdint.h> /* intmax_t */
 #include <unistd.h>
-#include <time.h>
 #include <limits.h>
 
 /* libalpm */
@@ -83,9 +81,7 @@ pmpkg_t SYMEXPORT *alpm_sync_newversion(pmpkg_t *pkg, alpm_list_t *dbs_sync)
 	return NULL;
 }
 
-/** Search for packages to upgrade and add them to the transaction.
- * @return 0 on success, -1 on error (pm_errno is set accordingly)
- */
+/** Search for packages to upgrade and add them to the transaction. */
 int SYMEXPORT alpm_sync_sysupgrade(int enable_downgrade)
 {
 	alpm_list_t *i, *j, *k;
@@ -117,7 +113,8 @@ int SYMEXPORT alpm_sync_sysupgrade(int enable_downgrade)
 			pmdb_t *sdb = j->data;
 			/* Check sdb */
 			pmpkg_t *spkg = _alpm_db_get_pkgfromcache(sdb, lpkg->name);
-			if(spkg) { /* 1. literal was found in sdb */
+			if(spkg) {
+				/* 1. literal was found in sdb */
 				int cmp = _alpm_pkg_compare_versions(spkg, lpkg);
 				if(cmp > 0) {
 					_alpm_log(PM_LOG_DEBUG, "new version of '%s' found (%s => %s)\n",
@@ -147,8 +144,10 @@ int SYMEXPORT alpm_sync_sysupgrade(int enable_downgrade)
 								lpkg->name, lpkg->version, sdb->treename, spkg->version);
 					}
 				}
-				break; /* jump to next local package */
-			} else { /* 2. search for replacers in sdb */
+				/* jump to next local package */
+				break;
+			} else {
+				/* 2. search for replacers in sdb */
 				int found = 0;
 				for(k = _alpm_db_get_pkgcache(sdb); k; k = k->next) {
 					spkg = k->data;
@@ -184,7 +183,8 @@ int SYMEXPORT alpm_sync_sysupgrade(int enable_downgrade)
 							if(alpm_pkg_get_reason(lpkg) == PM_PKG_REASON_EXPLICIT) {
 								tpkg->reason = PM_PKG_REASON_EXPLICIT;
 							}
-						} else { /* add spkg to the target list */
+						} else {
+							/* add spkg to the target list */
 							/* copy over reason */
 							spkg->reason = alpm_pkg_get_reason(lpkg);
 							spkg->removes = alpm_list_add(NULL, lpkg);
@@ -356,7 +356,7 @@ int _alpm_sync_prepare(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t *dbs_sync
 			int remove_unresolvable = 0;
 			QUESTION(handle->trans, PM_TRANS_CONV_REMOVE_PKGS, unresolvable,
 					NULL, NULL, &remove_unresolvable);
-			if (remove_unresolvable) {
+			if(remove_unresolvable) {
 				/* User wants to remove the unresolvable packages from the
 				   transaction. The packages will be removed from the actual
 				   transaction when the transaction packages are replaced with a
@@ -677,7 +677,7 @@ static int test_md5sum(pmtrans_t *trans, const char *filepath,
 	int ret = _alpm_test_md5sum(filepath, md5sum);
 	if(ret == 1) {
 		int doremove = 0;
-		QUESTION(trans, PM_TRANS_CONV_CORRUPTED_PKG, (char*)filepath,
+		QUESTION(trans, PM_TRANS_CONV_CORRUPTED_PKG, (char *)filepath,
 				NULL, NULL, &doremove);
 		if(doremove) {
 			unlink(filepath);
@@ -760,7 +760,7 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 			EVENT(trans, PM_TRANS_EVT_RETRIEVE_START, current->treename, NULL);
 			errors = _alpm_download_files(files, current->servers, cachedir);
 
-			if (errors) {
+			if(errors) {
 				_alpm_log(PM_LOG_WARNING, _("failed to retrieve some files from %s\n"),
 						current->treename);
 				if(pm_errno == 0) {
@@ -838,6 +838,7 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 		char *filepath = _alpm_filecache_find(filename);
 		const char *md5sum = alpm_pkg_get_md5sum(spkg);
 		const pmpgpsig_t *pgpsig = alpm_pkg_get_pgpsig(spkg);
+		pgp_verify_t check_sig;
 
 		/* check md5sum first */
 		if(test_md5sum(trans, filepath, md5sum) != 0) {
@@ -849,10 +850,12 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 		/* check PGP signature next */
 		pmdb_t *sdb = alpm_pkg_get_db(spkg);
 
-		if(sdb->pgp_verify != PM_PGP_VERIFY_NEVER) {
+		check_sig = _alpm_db_get_sigverify_level(sdb);
+
+		if(check_sig != PM_PGP_VERIFY_NEVER) {
 			int ret = _alpm_gpgme_checksig(filepath, pgpsig);
-			if((sdb->pgp_verify == PM_PGP_VERIFY_ALWAYS && ret != 0) ||
-					(sdb->pgp_verify == PM_PGP_VERIFY_OPTIONAL && ret == 1)) {
+			if((check_sig == PM_PGP_VERIFY_ALWAYS && ret != 0) ||
+					(check_sig == PM_PGP_VERIFY_OPTIONAL && ret == 1)) {
 				errors++;
 				*data = alpm_list_add(*data, strdup(filename));
 				FREE(filepath);

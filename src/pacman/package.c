@@ -26,7 +26,6 @@
 #include <unistd.h>
 #include <limits.h>
 #include <errno.h>
-#include <wchar.h>
 
 #include <alpm.h>
 #include <alpm_list.h>
@@ -51,6 +50,8 @@ void dump_pkg_full(pmpkg_t *pkg, int level)
 	const char *reason;
 	time_t bdate, idate;
 	char bdatestr[50] = "", idatestr[50] = "";
+	const char *label;
+	double size;
 	const alpm_list_t *i;
 	alpm_list_t *requiredby = NULL, *depstrings = NULL;
 
@@ -82,7 +83,7 @@ void dump_pkg_full(pmpkg_t *pkg, int level)
 
 	/* turn depends list into a text list */
 	for(i = alpm_pkg_get_depends(pkg); i; i = alpm_list_next(i)) {
-		pmdepend_t *dep = (pmdepend_t*)alpm_list_getdata(i);
+		pmdepend_t *dep = (pmdepend_t *)alpm_list_getdata(i);
 		depstrings = alpm_list_add(depstrings, alpm_dep_compute_string(dep));
 	}
 
@@ -105,17 +106,17 @@ void dump_pkg_full(pmpkg_t *pkg, int level)
 	}
 	list_display(_("Conflicts With :"), alpm_pkg_get_conflicts(pkg));
 	list_display(_("Replaces       :"), alpm_pkg_get_replaces(pkg));
+
+	size = humanize_size(alpm_pkg_get_size(pkg), 'K', 1, &label);
 	if(level < 0) {
-		printf(_("Download Size  : %6.2f K\n"),
-			(double)alpm_pkg_get_size(pkg) / 1024.0);
-	}
-	if(level == 0) {
-		printf(_("Compressed Size: %6.2f K\n"),
-			(double)alpm_pkg_get_size(pkg) / 1024.0);
+		printf(_("Download Size  : %6.2f %s\n"), size, label);
+	} else if(level == 0) {
+		printf(_("Compressed Size: %6.2f %s\n"), size, label);
 	}
 
-	printf(_("Installed Size : %6.2f K\n"),
-			(double)alpm_pkg_get_isize(pkg) / 1024.0);
+	size = humanize_size(alpm_pkg_get_isize(pkg), 'K', 1, &label);
+	printf(_("Installed Size : %6.2f %s\n"), size, label);
+
 	string_display(_("Packager       :"), alpm_pkg_get_packager(pkg));
 	string_display(_("Architecture   :"), alpm_pkg_get_arch(pkg));
 	string_display(_("Build Date     :"), bdatestr);
@@ -177,7 +178,7 @@ static const char *get_backup_file_status(const char *root,
 		}
 
 		/* if checksums don't match, file has been modified */
-		if (strcmp(md5sum, expected_md5) != 0) {
+		if(strcmp(md5sum, expected_md5) != 0) {
 			ret = "MODIFIED";
 		} else {
 			ret = "UNMODIFIED";

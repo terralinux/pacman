@@ -26,8 +26,6 @@
 
 #include <stdlib.h>
 #include <errno.h>
-#include <time.h>
-#include <fcntl.h>
 #include <string.h>
 #include <limits.h>
 #include <unistd.h>
@@ -36,6 +34,7 @@
 /* libalpm */
 #include "remove.h"
 #include "alpm_list.h"
+#include "alpm.h"
 #include "trans.h"
 #include "util.h"
 #include "log.h"
@@ -44,7 +43,6 @@
 #include "db.h"
 #include "deps.h"
 #include "handle.h"
-#include "alpm.h"
 
 int SYMEXPORT alpm_remove_pkg(pmpkg_t *pkg)
 {
@@ -129,6 +127,14 @@ static void remove_prepare_keep_needed(pmtrans_t *trans, pmdb_t *db,
 	}
 }
 
+/** Transaction preparation for remove actions.
+ * This functions takes a pointer to a alpm_list_t which will be
+ * filled with a list of pmdepmissing_t* objects representing
+ * the packages blocking the transaction.
+ * @param trans the transaction object
+ * @param db the database of local packages
+ * @param data a pointer to an alpm_list_t* to fill
+ */
 int _alpm_remove_prepare(pmtrans_t *trans, pmdb_t *db, alpm_list_t **data)
 {
 	alpm_list_t *lp;
@@ -152,7 +158,7 @@ int _alpm_remove_prepare(pmtrans_t *trans, pmdb_t *db, alpm_list_t **data)
 
 			if(trans->flags & PM_TRANS_FLAG_CASCADE) {
 				remove_prepare_cascade(trans, db, lp);
-			} else if (trans->flags & PM_TRANS_FLAG_UNNEEDED) {
+			} else if(trans->flags & PM_TRANS_FLAG_UNNEEDED) {
 				/* Remove needed packages (which would break dependencies)
 				 * from target list */
 				remove_prepare_keep_needed(trans, db, lp);
@@ -370,7 +376,7 @@ int _alpm_remove_packages(pmtrans_t *trans, pmdb_t *db)
 	for(targ = trans->remove; targ; targ = targ->next) {
 		int position = 0;
 		char scriptlet[PATH_MAX];
-		info = (pmpkg_t*)targ->data;
+		info = (pmpkg_t *)targ->data;
 		const char *pkgname = NULL;
 		size_t targcount = alpm_list_count(targ);
 

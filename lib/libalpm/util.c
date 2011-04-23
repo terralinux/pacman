@@ -34,6 +34,7 @@
 #include <time.h>
 #include <syslog.h>
 #include <errno.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -52,7 +53,6 @@
 /* libalpm */
 #include "util.h"
 #include "log.h"
-#include "package.h"
 #include "alpm.h"
 #include "alpm_list.h"
 #include "handle.h"
@@ -64,14 +64,14 @@ char* strsep(char** str, const char* delims)
 {
 	char* token;
 
-	if (*str==NULL) {
+	if(*str==NULL) {
 		/* No more tokens */
 		return NULL;
 	}
 
 	token=*str;
-	while (**str!='\0') {
-		if (strchr(delims,**str)!=NULL) {
+	while(**str!='\0') {
+		if(strchr(delims,**str)!=NULL) {
 			**str='\0';
 			(*str)++;
 			return token;
@@ -306,7 +306,7 @@ int _alpm_unpack(const char *archive, const char *prefix, alpm_list_t *list, int
 			char *found = alpm_list_find_str(list, prefix);
 			free(prefix);
 			if(!found) {
-				if (archive_read_data_skip(_archive) != ARCHIVE_OK) {
+				if(archive_read_data_skip(_archive) != ARCHIVE_OK) {
 					ret = 1;
 					goto cleanup;
 				}
@@ -572,7 +572,7 @@ char *_alpm_filecache_find(const char* filename)
 
 	/* Loop through the cache dirs until we find a matching file */
 	for(i = alpm_option_get_cachedirs(); i; i = alpm_list_next(i)) {
-		snprintf(path, PATH_MAX, "%s%s", (char*)alpm_list_getdata(i),
+		snprintf(path, PATH_MAX, "%s%s", (char *)alpm_list_getdata(i),
 				filename);
 		if(stat(path, &buf) == 0 && S_ISREG(buf.st_mode)) {
 			retpath = strdup(path);
@@ -699,7 +699,7 @@ char SYMEXPORT *alpm_compute_md5sum(const char *filename)
 	/* defined above for OpenSSL, otherwise defined in md5.h */
 	ret = md5_file(filename, output);
 
-	if (ret > 0) {
+	if(ret > 0) {
 		RET_ERR(PM_ERR_NOT_A_FILE, NULL);
 	}
 
@@ -752,7 +752,7 @@ int _alpm_archive_fgets(struct archive *a, struct archive_read_buffer *b)
 			}
 
 			/* zero-copy - this is the entire next block of data. */
-			b->ret = archive_read_data_block(a, (void*)&b->block,
+			b->ret = archive_read_data_block(a, (void *)&b->block,
 					&b->block_size, &offset);
 			b->block_offset = b->block;
 
@@ -837,7 +837,7 @@ int _alpm_splitname(const char *target, pmpkg_t *pkg)
 	end = target + strlen(target);
 
 	/* remove any trailing '/' */
-	while (*(end - 1) == '/') {
+	while(*(end - 1) == '/') {
 	  --end;
 	}
 
@@ -915,7 +915,7 @@ char *strndup(const char *s, size_t n)
   size_t len = strnlen(s, n);
   char *new = (char *) malloc(len + 1);
 
-  if (new == NULL)
+  if(new == NULL)
     return NULL;
 
   new[len] = '\0';

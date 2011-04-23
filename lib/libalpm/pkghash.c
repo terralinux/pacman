@@ -75,7 +75,7 @@ pmpkghash_t *_alpm_pkghash_create(size_t size)
 		return NULL;
 	}
 
-	CALLOC(hash->hash_table, hash->buckets, sizeof(alpm_list_t*), \
+	CALLOC(hash->hash_table, hash->buckets, sizeof(alpm_list_t *), \
 				free(hash); RET_ERR(PM_ERR_MEMORY, NULL));
 
 	return hash;
@@ -84,12 +84,11 @@ pmpkghash_t *_alpm_pkghash_create(size_t size)
 static size_t get_hash_position(unsigned long name_hash, pmpkghash_t *hash)
 {
 	size_t position;
-	alpm_list_t *ptr;
 
 	position = name_hash % hash->buckets;
 
 	/* collision resolution using open addressing with linear probing */
-	while((ptr = hash->hash_table[position]) != NULL) {
+	while(hash->hash_table[position] != NULL) {
 		position = (position + 1) % hash->buckets;
 	}
 

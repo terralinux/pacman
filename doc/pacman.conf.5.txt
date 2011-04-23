@@ -160,9 +160,6 @@ Options
 	Log action messages through syslog(). This will insert log entries into
 	`{localstatedir}/log/messages` or equivalent.
 
-*ShowSize*::
-	Display the size of individual packages for '\--sync' and '\--query' modes.
-
 *UseDelta*::
 	Download delta files instead of complete packages if possible.  Requires
 	the xdelta3 program to be installed.
@@ -176,6 +173,10 @@ Options
 *CheckSpace*::
 	Performs an approximate check for adequate available disk space before
 	installing packages.
+
+*VerbosePkgLists*::
+	Displays name, version and size of target packages formatted
+	as a table for upgrade, sync and remove operations.
 
 Repository Sections
 -------------------
