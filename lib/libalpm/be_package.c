@@ -87,7 +87,7 @@ static void *_package_changelog_open(pmpkg_t *pkg)
  * @return the number of characters read, or 0 if there is no more data
  */
 static size_t _package_changelog_read(void *ptr, size_t size,
-		const pmpkg_t *pkg, const void *fp)
+		const pmpkg_t UNUSED *pkg, const void *fp)
 {
 	ssize_t sret = archive_read_data((struct archive *)fp, ptr, size);
 	/* Report error (negative values) */
@@ -106,7 +106,7 @@ static size_t _package_changelog_read(void *ptr, size_t size,
  * @param fp a 'file stream' to the package changelog
  * @return whether closing the package changelog stream was successful
  */
-static int _package_changelog_close(const pmpkg_t *pkg, void *fp)
+static int _package_changelog_close(const pmpkg_t UNUSED *pkg, void *fp)
 {
 	return archive_read_finish((struct archive *)fp);
 }
@@ -226,9 +226,10 @@ static int parse_descfile(struct archive *a, pmpkg_t *newpkg)
  *             through the full archive
  * @return An information filled pmpkg_t struct
  */
-static pmpkg_t *pkg_load(const char *pkgfile, int full)
+pmpkg_t *_alpm_pkg_load_internal(const char *pkgfile, int full,
+		const char *md5sum, const char *base64_sig, pgp_verify_t check_sig)
 {
-	int ret = ARCHIVE_OK;
+	int ret;
 	int config = 0;
 	struct archive *archive;
 	struct archive_entry *entry;
@@ -243,23 +244,38 @@ static pmpkg_t *pkg_load(const char *pkgfile, int full)
 
 	/* attempt to stat the package file, ensure it exists */
 	if(stat(pkgfile, &st) == 0) {
-		int sig_ret;
-
 		newpkg = _alpm_pkg_new();
 		if(newpkg == NULL) {
 			RET_ERR(PM_ERR_MEMORY, NULL);
 		}
 		newpkg->filename = strdup(pkgfile);
 		newpkg->size = st.st_size;
-
-		/* TODO: do something with ret value */
-		sig_ret = _alpm_load_signature(pkgfile, &(newpkg->pgpsig));
-		(void)sig_ret;
 	} else {
 		/* couldn't stat the pkgfile, return an error */
 		RET_ERR(PM_ERR_PKG_OPEN, NULL);
 	}
 
+	/* first steps- validate the package file */
+	_alpm_log(PM_LOG_DEBUG, "md5sum: %s\n", md5sum);
+	if(md5sum) {
+		_alpm_log(PM_LOG_DEBUG, "checking md5sum for %s\n", pkgfile);
+		if(_alpm_test_md5sum(pkgfile, md5sum) != 0) {
+			alpm_pkg_free(newpkg);
+			RET_ERR(PM_ERR_PKG_INVALID, NULL);
+		}
+	}
+
+	_alpm_log(PM_LOG_DEBUG, "base64_sig: %s\n", base64_sig);
+	if(check_sig != PM_PGP_VERIFY_NEVER) {
+		_alpm_log(PM_LOG_DEBUG, "checking signature for %s\n", pkgfile);
+		ret = _alpm_gpgme_checksig(pkgfile, base64_sig);
+		if((check_sig == PM_PGP_VERIFY_ALWAYS && ret != 0) ||
+				(check_sig == PM_PGP_VERIFY_OPTIONAL && ret == 1)) {
+			RET_ERR(PM_ERR_SIG_INVALID, NULL);
+		}
+	}
+
+	/* next- try to create an archive object to read in the package */
 	if((archive = archive_read_new()) == NULL) {
 		alpm_pkg_free(newpkg);
 		RET_ERR(PM_ERR_LIBARCHIVE, NULL);
@@ -338,7 +354,6 @@ static pmpkg_t *pkg_load(const char *pkgfile, int full)
 
 	/* internal fields for package struct */
 	newpkg->origin = PKG_FROM_FILE;
-	/* TODO eventually kill/move this? */
 	newpkg->origin_data.file = strdup(pkgfile);
 	newpkg->ops = get_file_pkg_ops();
 
@@ -365,16 +380,15 @@ error:
 	return NULL;
 }
 
-int SYMEXPORT alpm_pkg_load(const char *filename, int full, pmpkg_t **pkg)
+int SYMEXPORT alpm_pkg_load(const char *filename, int full,
+		pgp_verify_t check_sig, pmpkg_t **pkg)
 {
 	ALPM_LOG_FUNC;
 
 	/* Sanity checks */
-	ASSERT(filename != NULL && strlen(filename) != 0,
-			RET_ERR(PM_ERR_WRONG_ARGS, -1));
 	ASSERT(pkg != NULL, RET_ERR(PM_ERR_WRONG_ARGS, -1));
 
-	*pkg = pkg_load(filename, full);
+	*pkg = _alpm_pkg_load_internal(filename, full, NULL, NULL, check_sig);
 	if(*pkg == NULL) {
 		/* pm_errno is set by pkg_load */
 		return -1;

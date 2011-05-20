@@ -97,9 +97,8 @@ struct __pmpkg_t {
 	char *url;
 	char *packager;
 	char *md5sum;
+	char *base64_sig;
 	char *arch;
-
-	pmpgpsig_t pgpsig;
 
 	time_t builddate;
 	time_t installdate;
@@ -140,6 +139,10 @@ pmpkg_t* _alpm_pkg_new(void);
 pmpkg_t *_alpm_pkg_dup(pmpkg_t *pkg);
 void _alpm_pkg_free(pmpkg_t *pkg);
 void _alpm_pkg_free_trans(pmpkg_t *pkg);
+
+pmpkg_t *_alpm_pkg_load_internal(const char *filename, int full,
+		const char *md5sum, const char *base64_sig, pgp_verify_t check_sig);
+
 int _alpm_pkg_cmp(const void *p1, const void *p2);
 int _alpm_pkg_compare_versions(pmpkg_t *local_pkg, pmpkg_t *pkg);
 pmpkg_t *_alpm_pkg_find(alpm_list_t *haystack, const char *needle);

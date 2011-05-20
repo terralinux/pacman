@@ -651,6 +651,7 @@ static int apply_deltas(pmtrans_t *trans)
 			if(retval != 0) {
 				/* one delta failed for this package, cancel the remaining ones */
 				EVENT(trans, PM_TRANS_EVT_DELTA_PATCH_FAILED, NULL, NULL);
+				pm_errno = PM_ERR_DLT_PATCHFAILED;
 				ret = 1;
 				break;
 			}
@@ -687,18 +688,50 @@ static int test_md5sum(pmtrans_t *trans, const char *filepath,
 	return ret;
 }
 
-int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
+static int validate_deltas(pmtrans_t *trans, alpm_list_t *deltas,
+		alpm_list_t **data)
 {
-	alpm_list_t *i, *j, *files = NULL;
-	alpm_list_t *deltas = NULL;
-	size_t numtargs, current = 0, replaces = 0;
+	int errors = 0, ret = 0;
+	alpm_list_t *i;
+
+	if(!deltas) {
+		return 0;
+	}
+
+	/* Check integrity of deltas */
+	EVENT(trans, PM_TRANS_EVT_DELTA_INTEGRITY_START, NULL, NULL);
+
+	for(i = deltas; i; i = i->next) {
+		pmdelta_t *d = alpm_list_getdata(i);
+		const char *filename = alpm_delta_get_filename(d);
+		char *filepath = _alpm_filecache_find(filename);
+		const char *md5sum = alpm_delta_get_md5sum(d);
+
+		if(test_md5sum(trans, filepath, md5sum) != 0) {
+			errors++;
+			*data = alpm_list_add(*data, strdup(filename));
+		}
+		FREE(filepath);
+	}
+	if(errors) {
+		pm_errno = PM_ERR_DLT_INVALID;
+		return -1;
+	}
+	EVENT(trans, PM_TRANS_EVT_DELTA_INTEGRITY_DONE, NULL, NULL);
+
+	/* Use the deltas to generate the packages */
+	EVENT(trans, PM_TRANS_EVT_DELTA_PATCHES_START, NULL, NULL);
+	ret = apply_deltas(trans);
+	EVENT(trans, PM_TRANS_EVT_DELTA_PATCHES_DONE, NULL, NULL);
+	return ret;
+}
+
+static int download_files(pmtrans_t *trans, alpm_list_t **deltas)
+{
+	const char *cachedir;
+	alpm_list_t *i, *j;
+	alpm_list_t *files = NULL;
 	int errors = 0;
-	const char *cachedir = NULL;
-	int ret = -1;
-
-	ALPM_LOG_FUNC;
-
-	ASSERT(trans != NULL, RET_ERR(PM_ERR_TRANS_NULL, -1));
 
 	cachedir = _alpm_filecache_setup();
 	trans->state = STATE_DOWNLOADING;
@@ -731,26 +764,18 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 				alpm_list_t *delta_path = spkg->delta_path;
 				if(delta_path) {
 					/* using deltas */
-					alpm_list_t *dlts = NULL;
-
+					alpm_list_t *dlts;
 					for(dlts = delta_path; dlts; dlts = dlts->next) {
-						pmdelta_t *d = dlts->data;
-
-						if(d->download_size != 0) {
-							/* add the delta filename to the download list if needed */
-							files = alpm_list_add(files, strdup(d->delta));
+						pmdelta_t *delta = dlts->data;
+						if(delta->download_size != 0) {
+							files = alpm_list_add(files, strdup(delta->delta));
 						}
-
 						/* keep a list of all the delta files for md5sums */
-						deltas = alpm_list_add(deltas, d);
+						*deltas = alpm_list_add(*deltas, delta);
 					}
 
-				} else {
-					/* not using deltas */
-					if(spkg->download_size != 0) {
-						/* add the filename to the download list if needed */
-						files = alpm_list_add(files, strdup(fname));
-					}
+				} else if(spkg->download_size != 0) {
+					files = alpm_list_add(files, strdup(fname));
 				}
 
 			}
@@ -758,17 +783,40 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 
 		if(files) {
 			EVENT(trans, PM_TRANS_EVT_RETRIEVE_START, current->treename, NULL);
-			errors = _alpm_download_files(files, current->servers, cachedir);
+			for(j = files; j; j = j->next) {
+				const char *filename = j->data;
+				alpm_list_t *server;
+				int ret = -1;
+				for(server = current->servers; server; server = server->next) {
+					const char *server_url = server->data;
+					char *fileurl;
+					size_t len;
 
+					/* print server + filename into a buffer */
+					len = strlen(server_url) + strlen(filename) + 2;
+					CALLOC(fileurl, len, sizeof(char), RET_ERR(PM_ERR_MEMORY, -1));
+					snprintf(fileurl, len, "%s/%s", server_url, filename);
+
+					ret = _alpm_download(fileurl, cachedir, 0, 1, 0);
+					FREE(fileurl);
+					if(ret != -1) {
+						break;
+					}
+				}
+				if(ret == -1) {
+					errors++;
+				}
+			}
+
+			FREELIST(files);
 			if(errors) {
 				_alpm_log(PM_LOG_WARNING, _("failed to retrieve some files from %s\n"),
 						current->treename);
 				if(pm_errno == 0) {
 					pm_errno = PM_ERR_RETRIEVE;
 				}
-				goto error;
+				return -1;
 			}
-			FREELIST(files);
 		}
 	}
 
@@ -782,42 +830,30 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 	if(handle->totaldlcb) {
 		handle->totaldlcb(0);
 	}
+	return 0;
+}
 
-	/* if we have deltas to work with */
-	if(handle->usedelta && deltas) {
-		int ret = 0;
-		errors = 0;
-		/* Check integrity of deltas */
-		EVENT(trans, PM_TRANS_EVT_DELTA_INTEGRITY_START, NULL, NULL);
+int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
+{
+	alpm_list_t *i;
+	alpm_list_t *deltas = NULL;
+	size_t numtargs, current = 0, replaces = 0;
+	int errors;
 
-		for(i = deltas; i; i = i->next) {
-			pmdelta_t *d = alpm_list_getdata(i);
-			const char *filename = alpm_delta_get_filename(d);
-			char *filepath = _alpm_filecache_find(filename);
-			const char *md5sum = alpm_delta_get_md5sum(d);
+	ALPM_LOG_FUNC;
 
-			if(test_md5sum(trans, filepath, md5sum) != 0) {
-				errors++;
-				*data = alpm_list_add(*data, strdup(filename));
-			}
-			FREE(filepath);
-		}
-		if(errors) {
-			pm_errno = PM_ERR_DLT_INVALID;
-			goto error;
-		}
-		EVENT(trans, PM_TRANS_EVT_DELTA_INTEGRITY_DONE, NULL, NULL);
+	ASSERT(trans != NULL, RET_ERR(PM_ERR_TRANS_NULL, -1));
 
-		/* Use the deltas to generate the packages */
-		EVENT(trans, PM_TRANS_EVT_DELTA_PATCHES_START, NULL, NULL);
-		ret = apply_deltas(trans);
-		EVENT(trans, PM_TRANS_EVT_DELTA_PATCHES_DONE, NULL, NULL);
-
-		if(ret) {
-			pm_errno = PM_ERR_DLT_PATCHFAILED;
-			goto error;
-		}
+	if(download_files(trans, &deltas)) {
+		alpm_list_free(deltas);
+		return -1;
 	}
+
+	if(validate_deltas(trans, deltas, data)) {
+		alpm_list_free(deltas);
+		return -1;
+	}
+	alpm_list_free(deltas);
 
 	/* Check integrity of packages */
 	numtargs = alpm_list_count(trans->add);
@@ -828,46 +864,27 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 	for(i = trans->add; i; i = i->next, current++) {
 		pmpkg_t *spkg = i->data;
 		int percent = (current * 100) / numtargs;
+		const char *filename;
+		char *filepath;
+		pgp_verify_t check_sig;
+
+		PROGRESS(trans, PM_TRANS_PROGRESS_INTEGRITY_START, "", percent,
+				numtargs, current);
 		if(spkg->origin == PKG_FROM_FILE) {
 			continue; /* pkg_load() has been already called, this package is valid */
 		}
-		PROGRESS(trans, PM_TRANS_PROGRESS_INTEGRITY_START, "", percent,
-				numtargs, current);
 
-		const char *filename = alpm_pkg_get_filename(spkg);
-		char *filepath = _alpm_filecache_find(filename);
-		const char *md5sum = alpm_pkg_get_md5sum(spkg);
-		const pmpgpsig_t *pgpsig = alpm_pkg_get_pgpsig(spkg);
-		pgp_verify_t check_sig;
-
-		/* check md5sum first */
-		if(test_md5sum(trans, filepath, md5sum) != 0) {
-			errors++;
-			*data = alpm_list_add(*data, strdup(filename));
-			FREE(filepath);
-			continue;
-		}
-		/* check PGP signature next */
+		filename = alpm_pkg_get_filename(spkg);
+		filepath = _alpm_filecache_find(filename);
 		pmdb_t *sdb = alpm_pkg_get_db(spkg);
-
 		check_sig = _alpm_db_get_sigverify_level(sdb);
 
-		if(check_sig != PM_PGP_VERIFY_NEVER) {
-			int ret = _alpm_gpgme_checksig(filepath, pgpsig);
-			if((check_sig == PM_PGP_VERIFY_ALWAYS && ret != 0) ||
-					(check_sig == PM_PGP_VERIFY_OPTIONAL && ret == 1)) {
-				errors++;
-				*data = alpm_list_add(*data, strdup(filename));
-				FREE(filepath);
-				continue;
-			}
-		}
 		/* load the package file and replace pkgcache entry with it in the target list */
 		/* TODO: alpm_pkg_get_db() will not work on this target anymore */
 		_alpm_log(PM_LOG_DEBUG, "replacing pkgcache entry with package file for target %s\n", spkg->name);
-		pmpkg_t *pkgfile;
-		if(alpm_pkg_load(filepath, 1, &pkgfile) != 0) {
-			_alpm_pkg_free(pkgfile);
+		pmpkg_t *pkgfile =_alpm_pkg_load_internal(filepath, 1, spkg->md5sum,
+				spkg->base64_sig, check_sig);
+		if(!pkgfile) {
 			errors++;
 			*data = alpm_list_add(*data, strdup(filename));
 			FREE(filepath);
@@ -885,13 +902,11 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 
 
 	if(errors) {
-		pm_errno = PM_ERR_PKG_INVALID;
-		goto error;
+		RET_ERR(PM_ERR_PKG_INVALID, -1);
 	}
 
 	if(trans->flags & PM_TRANS_FLAG_DOWNLOADONLY) {
-		ret = 0;
-		goto error;
+		return 0;
 	}
 
 	trans->state = STATE_COMMITING;
@@ -906,14 +921,13 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 		alpm_list_t *conflict = _alpm_db_find_fileconflicts(db_local, trans,
 								    trans->add, trans->remove);
 		if(conflict) {
-			pm_errno = PM_ERR_FILE_CONFLICTS;
 			if(data) {
 				*data = conflict;
 			} else {
 				alpm_list_free_inner(conflict, (alpm_list_fn_free)_alpm_fileconflict_free);
 				alpm_list_free(conflict);
 			}
-			goto error;
+			RET_ERR(PM_ERR_FILE_CONFLICTS, -1);
 		}
 
 		EVENT(trans, PM_TRANS_EVT_FILECONFLICTS_DONE, NULL, NULL);
@@ -926,7 +940,7 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 		_alpm_log(PM_LOG_DEBUG, "checking available disk space\n");
 		if(_alpm_check_diskspace(trans, handle->db_local) == -1) {
 			_alpm_log(PM_LOG_ERROR, "%s\n", _("not enough free disk space"));
-			goto error;
+			return -1;
 		}
 
 		EVENT(trans, PM_TRANS_EVT_DISKSPACE_DONE, NULL, NULL);
@@ -938,7 +952,7 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 		/* we want the frontend to be aware of commit details */
 		if(_alpm_remove_packages(trans, handle->db_local) == -1) {
 			_alpm_log(PM_LOG_ERROR, _("could not commit removal transaction\n"));
-			goto error;
+			return -1;
 		}
 	}
 
@@ -946,14 +960,10 @@ int _alpm_sync_commit(pmtrans_t *trans, pmdb_t *db_local, alpm_list_t **data)
 	_alpm_log(PM_LOG_DEBUG, "installing packages\n");
 	if(_alpm_upgrade_packages(trans, handle->db_local) == -1) {
 		_alpm_log(PM_LOG_ERROR, _("could not commit transaction\n"));
-		goto error;
+		return -1;
 	}
-	ret = 0;
 
-error:
-	FREELIST(files);
-	alpm_list_free(deltas);
-	return ret;
+	return 0;
 }
 
 /* vim: set ts=2 sw=2 noet: */

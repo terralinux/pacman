@@ -180,7 +180,7 @@ static alpm_list_t *_cache_get_replaces(pmpkg_t *pkg)
 }
 
 /* local packages can not have deltas */
-static alpm_list_t *_cache_get_deltas(pmpkg_t *pkg)
+static alpm_list_t *_cache_get_deltas(pmpkg_t UNUSED *pkg)
 {
 	return NULL;
 }
@@ -245,7 +245,7 @@ static void *_cache_changelog_open(pmpkg_t *pkg)
  * @return the number of characters read, or 0 if there is no more data
  */
 static size_t _cache_changelog_read(void *ptr, size_t size,
-		const pmpkg_t *pkg, const void *fp)
+		const pmpkg_t UNUSED *pkg, const void *fp)
 {
 	return fread(ptr, 1, size, (FILE *)fp);
 }
@@ -257,7 +257,7 @@ static size_t _cache_changelog_read(void *ptr, size_t size,
  * @param fp a 'file stream' to the package changelog
  * @return whether closing the package changelog stream was successful
  */
-static int _cache_changelog_close(const pmpkg_t *pkg, void *fp)
+static int _cache_changelog_close(const pmpkg_t UNUSED *pkg, void *fp)
 {
 	return fclose((FILE *)fp);
 }
@@ -352,7 +352,8 @@ static int local_db_populate(pmdb_t *db)
 
 	dbpath = _alpm_db_path(db);
 	if(dbpath == NULL) {
-		RET_ERR(PM_ERR_DB_OPEN, -1);
+		/* pm_errno set in _alpm_db_path() */
+		return -1;
 	}
 	dbdir = opendir(dbpath);
 	if(dbdir == NULL) {
@@ -434,7 +435,7 @@ static int local_db_populate(pmdb_t *db)
 		}
 
 		/* add to the collection */
-		_alpm_log(PM_LOG_DEBUG, "adding '%s' to package cache for db '%s'\n",
+		_alpm_log(PM_LOG_FUNCTION, "adding '%s' to package cache for db '%s'\n",
 				pkg->name, db->treename);
 		db->pkgcache = _alpm_pkghash_add(db->pkgcache, pkg);
 		count++;
@@ -444,6 +445,9 @@ static int local_db_populate(pmdb_t *db)
 	if(count > 0) {
 		db->pkgcache->list = alpm_list_msort(db->pkgcache->list, (size_t)count, _alpm_pkg_cmp);
 	}
+	_alpm_log(PM_LOG_DEBUG, "added %d packages to package cache for db '%s'\n",
+			count, db->treename);
+
 	return count;
 }
 

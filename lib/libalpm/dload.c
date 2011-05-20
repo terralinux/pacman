@@ -46,7 +46,7 @@
 static double prevprogress; /* last download amount */
 #endif
 
-static char *get_filename(const char *url)
+static const char *get_filename(const char *url)
 {
 	char *filename = strrchr(url, '/');
 	if(filename != NULL) {
@@ -71,21 +71,17 @@ static char *get_fullpath(const char *path, const char *filename,
 #define check_stop() if(dload_interrupted) { ret = -1; goto cleanup; }
 enum sighandlers { OLD = 0, NEW = 1 };
 
-int dload_interrupted;
-static void inthandler(int signum)
+static int dload_interrupted;
+static void inthandler(int UNUSED signum)
 {
 	dload_interrupted = 1;
 }
 
 static int curl_progress(void *file, double dltotal, double dlnow,
-		double ultotal, double ulnow)
+		double UNUSED ultotal, double UNUSED ulnow)
 {
 	struct fileinfo *dlfile = (struct fileinfo *)file;
 	double current_size, total_size;
-
-	/* unused parameters */
-	(void)ultotal;
-	(void)ulnow;
 
 	/* SIGINT sent, abort by alerting curl */
 	if(dload_interrupted) {
@@ -119,7 +115,7 @@ static int curl_progress(void *file, double dltotal, double dlnow,
 
 static int curl_gethost(const char *url, char *buffer)
 {
-	int hostlen;
+	size_t hostlen;
 	char *p;
 
 	if(strncmp(url, "file://", 7) == 0) {
@@ -155,16 +151,18 @@ static int utimes_long(const char *path, long time)
 
 
 static int curl_download_internal(const char *url, const char *localpath,
-		int force)
+		int force, int allow_resume, int errors_ok)
 {
 	int ret = -1;
 	FILE *localf = NULL;
 	const char *useragent;
 	const char *open_mode = "wb";
 	char *destfile, *tempfile;
-	char hostname[256]; /* RFC1123 states applications should support this length */
+	/* RFC1123 states applications should support this length */
+	char hostname[256];
+	char error_buffer[CURL_ERROR_SIZE];
 	struct stat st;
-	long httpresp, timecond, remote_time;
+	long timecond, remote_time;
 	double remote_size, bytes_dl;
 	struct sigaction sig_pipe[2], sig_int[2];
 	struct fileinfo dlfile;
@@ -182,11 +180,14 @@ static int curl_download_internal(const char *url, const char *localpath,
 		goto cleanup;
 	}
 
+	error_buffer[0] = '\0';
+
 	/* the curl_easy handle is initialized with the alpm handle, so we only need
 	 * to reset the curl handle set parameters for each time it's used. */
 	curl_easy_reset(handle->curl);
 	curl_easy_setopt(handle->curl, CURLOPT_URL, url);
 	curl_easy_setopt(handle->curl, CURLOPT_FAILONERROR, 1L);
+	curl_easy_setopt(handle->curl, CURLOPT_ERRORBUFFER, error_buffer);
 	curl_easy_setopt(handle->curl, CURLOPT_CONNECTTIMEOUT, 10L);
 	curl_easy_setopt(handle->curl, CURLOPT_FILETIME, 1L);
 	curl_easy_setopt(handle->curl, CURLOPT_NOPROGRESS, 0L);
@@ -205,9 +206,8 @@ static int curl_download_internal(const char *url, const char *localpath,
 		 * our local is out of date. */
 		curl_easy_setopt(handle->curl, CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
 		curl_easy_setopt(handle->curl, CURLOPT_TIMEVALUE, (long)st.st_mtime);
-	} else if(stat(tempfile, &st) == 0 && st.st_size > 0) {
-		/* assume its a partial package download. we do not support resuming of
-		 * transfers on partially downloaded sync DBs. */
+	} else if(stat(tempfile, &st) == 0 && allow_resume) {
+		/* a previous partial download exists, resume from end of file. */
 		open_mode = "ab";
 		curl_easy_setopt(handle->curl, CURLOPT_RESUME_FROM, (long)st.st_size);
 		_alpm_log(PM_LOG_DEBUG, "tempfile found, attempting continuation");
@@ -242,8 +242,23 @@ static int curl_download_internal(const char *url, const char *localpath,
 	/* perform transfer */
 	handle->curlerr = curl_easy_perform(handle->curl);
 
+	/* was it a success? */
+	if(handle->curlerr == CURLE_ABORTED_BY_CALLBACK) {
+		goto cleanup;
+	} else if(handle->curlerr != CURLE_OK) {
+		if(!errors_ok) {
+			pm_errno = PM_ERR_LIBCURL;
+			_alpm_log(PM_LOG_ERROR, _("failed retrieving file '%s' from %s : %s\n"),
+					dlfile.filename, hostname, error_buffer);
+		} else {
+			_alpm_log(PM_LOG_DEBUG, "failed retrieving file '%s' from %s : %s\n",
+					dlfile.filename, hostname, error_buffer);
+		}
+		unlink(tempfile);
+		goto cleanup;
+	}
+
 	/* retrieve info about the state of the transfer */
-	curl_easy_getinfo(handle->curl, CURLINFO_RESPONSE_CODE, &httpresp);
 	curl_easy_getinfo(handle->curl, CURLINFO_FILETIME, &remote_time);
 	curl_easy_getinfo(handle->curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &remote_size);
 	curl_easy_getinfo(handle->curl, CURLINFO_SIZE_DOWNLOAD, &bytes_dl);
@@ -251,18 +266,8 @@ static int curl_download_internal(const char *url, const char *localpath,
 
 	/* time condition was met and we didn't download anything. we need to
 	 * clean up the 0 byte .part file that's left behind. */
-	if(DOUBLE_EQ(bytes_dl, 0) && timecond == 1) {
+	if(timecond == 1 && DOUBLE_EQ(bytes_dl, 0)) {
 		ret = 1;
-		unlink(tempfile);
-		goto cleanup;
-	}
-
-	if(handle->curlerr == CURLE_ABORTED_BY_CALLBACK) {
-		goto cleanup;
-	} else if(handle->curlerr != CURLE_OK) {
-		pm_errno = PM_ERR_LIBCURL;
-		_alpm_log(PM_LOG_ERROR, _("failed retrieving file '%s' from %s : %s\n"),
-				dlfile.filename, hostname, curl_easy_strerror(handle->curlerr));
 		unlink(tempfile);
 		goto cleanup;
 	}
@@ -286,8 +291,6 @@ cleanup:
 		utimes_long(tempfile, remote_time);
 	}
 
-	/* TODO: A signature download will need to return success here as well before
-	 * we're willing to rotate the new file into place. */
 	if(ret == 0) {
 		rename(tempfile, destfile);
 	}
@@ -307,83 +310,29 @@ cleanup:
 }
 #endif
 
-static int download(const char *url, const char *localpath,
-		int force)
+int _alpm_download(const char *url, const char *localpath,
+		int force, int allow_resume, int errors_ok)
 {
 	if(handle->fetchcb == NULL) {
 #ifdef HAVE_LIBCURL
-		return curl_download_internal(url, localpath, force);
+		return curl_download_internal(url, localpath, force, allow_resume, errors_ok);
 #else
 		RET_ERR(PM_ERR_EXTERNAL_DOWNLOAD, -1);
 #endif
 	} else {
 		int ret = handle->fetchcb(url, localpath, force);
-		if(ret == -1) {
+		if(ret == -1 && !errors_ok) {
 			RET_ERR(PM_ERR_EXTERNAL_DOWNLOAD, -1);
 		}
 		return ret;
 	}
 }
 
-/*
- * Download a single file
- *   - servers must be a list of urls WITHOUT trailing slashes.
- *
- * RETURN:  0 for successful download
- *          1 if the files are identical
- *         -1 on error
- */
-int _alpm_download_single_file(const char *filename,
-		alpm_list_t *servers, const char *localpath,
-		int force)
-{
-	alpm_list_t *i;
-	int ret = -1;
-
-	ASSERT(servers != NULL, RET_ERR(PM_ERR_SERVER_NONE, -1));
-
-	for(i = servers; i; i = i->next) {
-		const char *server = i->data;
-		char *fileurl = NULL;
-		size_t len;
-
-		/* print server + filename into a buffer */
-		len = strlen(server) + strlen(filename) + 2;
-		CALLOC(fileurl, len, sizeof(char), RET_ERR(PM_ERR_MEMORY, -1));
-		snprintf(fileurl, len, "%s/%s", server, filename);
-
-		ret = download(fileurl, localpath, force);
-		FREE(fileurl);
-		if(ret != -1) {
-			break;
-		}
-	}
-
-	return ret;
-}
-
-int _alpm_download_files(alpm_list_t *files,
-		alpm_list_t *servers, const char *localpath)
-{
-	int ret = 0;
-	alpm_list_t *lp;
-
-	for(lp = files; lp; lp = lp->next) {
-		char *filename = lp->data;
-		if(_alpm_download_single_file(filename, servers,
-					localpath, 0) == -1) {
-			ret++;
-		}
-	}
-
-	return ret;
-}
-
 /** Fetch a remote pkg. */
 char SYMEXPORT *alpm_fetch_pkgurl(const char *url)
 {
-	char *filename, *filepath;
-	const char *cachedir;
+	char *filepath;
+	const char *filename, *cachedir;
 	int ret;
 
 	ALPM_LOG_FUNC;
@@ -394,12 +343,34 @@ char SYMEXPORT *alpm_fetch_pkgurl(const char *url)
 	cachedir = _alpm_filecache_setup();
 
 	/* download the file */
-	ret = download(url, cachedir, 0);
+	ret = _alpm_download(url, cachedir, 0, 1, 0);
 	if(ret == -1) {
 		_alpm_log(PM_LOG_WARNING, _("failed to download %s\n"), url);
 		return NULL;
 	}
 	_alpm_log(PM_LOG_DEBUG, "successfully downloaded %s\n", url);
+
+	/* attempt to download the signature */
+	if(ret == 0 && (handle->sigverify == PM_PGP_VERIFY_ALWAYS ||
+				handle->sigverify == PM_PGP_VERIFY_OPTIONAL)) {
+		char *sig_url;
+		size_t len;
+		int errors_ok = (handle->sigverify == PM_PGP_VERIFY_OPTIONAL);
+
+		len = strlen(url) + 5;
+		CALLOC(sig_url, len, sizeof(char), RET_ERR(PM_ERR_MEMORY, NULL));
+		snprintf(sig_url, len, "%s.sig", url);
+
+		ret = _alpm_download(sig_url, cachedir, 1, 0, errors_ok);
+		if(ret == -1 && !errors_ok) {
+			_alpm_log(PM_LOG_WARNING, _("failed to download %s\n"), sig_url);
+			/* Warn now, but don't return NULL. We will fail later during package
+			 * load time. */
+		} else if(ret == 0) {
+			_alpm_log(PM_LOG_DEBUG, "successfully downloaded %s\n", sig_url);
+		}
+		FREE(sig_url);
+	}
 
 	/* we should be able to find the file the second time around */
 	filepath = _alpm_filecache_find(filename);

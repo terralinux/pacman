@@ -4,8 +4,7 @@
 #   repo-remove - remove a package entry from a given repo database file
 #   @configure_input@
 #
-#   Copyright (c) 2006-2008 Aaron Griffin <aaron@archlinux.org>
-#   Copyright (c) 2007-2008 Dan McGee <dan@archlinux.org>
+#   Copyright (c) 2006-2011 Pacman Development Team <pacman-dev@archlinux.org>
 #
 #   This program is free software; you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -66,28 +65,29 @@ usage() {
 	cmd="$(basename $0)"
 	printf "%s (pacman) %s\n\n" "$cmd" "$myver"
 	if [[ $cmd == "repo-add" ]] ; then
-		printf "$(gettext "Usage: repo-add [-d] [-f] [-q] [-s] [-v] <path-to-db> <package|delta> ...\n")"
+		printf "$(gettext "Usage: repo-add [options] <path-to-db> <package|delta> ...\n")"
 		printf "$(gettext "\
 repo-add will update a package database by reading a package file.\n\
 Multiple packages to add can be specified on the command line.\n\n")"
 		printf "$(gettext "Options:\n")"
-		printf "$(gettext "  -d, --delta   generate and add delta for package update\n")"
-		printf "$(gettext "  -f, --files   update database's file list\n")"
+		printf "$(gettext "  -d, --delta       generate and add delta for package update\n")"
+		printf "$(gettext "  -f, --files       update database's file list\n")"
 	elif [[ $cmd == "repo-remove" ]] ; then
-		printf "$(gettext "Usage: repo-remove [-q] [-s] [-v] <path-to-db> <packagename|delta> ...\n\n")"
+		printf "$(gettext "Usage: repo-remove [options] <path-to-db> <packagename|delta> ...\n\n")"
 		printf "$(gettext "\
 repo-remove will update a package database by removing the package name\n\
 specified on the command line from the given repo database. Multiple\n\
 packages to remove can be specified on the command line.\n\n")"
 		printf "$(gettext "Options:\n")"
 	fi
-	printf "$(gettext "  -q, --quiet   minimize output\n")"
-	printf "$(gettext "  -s, --sign    sign database with GnuPG after update\n")"
-	printf "$(gettext "  -v, --verify  verify database's signature before update\n")"
+	printf "$(gettext "  -q, --quiet       minimize output\n")"
+	printf "$(gettext "  -s, --sign        sign database with GnuPG after update\n")"
+	printf "$(gettext "  -k, --key <key>   use the specified key to sign the database\n")"
+	printf "$(gettext "  -v, --verify      verify database's signature before update\n")"
 	printf "$(gettext "\n\
 See %s(8) for more details and descriptions of the available options.\n\n")" $cmd
 	if [[ $cmd == "repo-add" ]] ; then
-		echo "$(gettext "Example:  repo-add /path/to/repo.db.tar.gz pacman-3.0.0.pkg.tar.gz")"
+		echo "$(gettext "Example:  repo-add /path/to/repo.db.tar.gz pacman-3.0.0-1-i686.pkg.tar.gz")"
 	elif [[ $cmd == "repo-remove" ]] ; then
 		echo "$(gettext "Example:  repo-remove /path/to/repo.db.tar.gz kernel26")"
 	fi
@@ -97,8 +97,7 @@ version() {
 	cmd="$(basename $0)"
 	printf "%s (pacman) %s\n\n" "$cmd" "$myver"
 	printf "$(gettext "\
-Copyright (C) 2006-2008 Aaron Griffin <aaron@archlinux.org>.\n\
-Copyright (c) 2007-2008 Dan McGee <dan@archlinux.org>.\n\n\
+Copyright (c) 2006-2011 Pacman Development Team <pacman-dev@archlinux.org>\n\n\
 This is free software; see the source for copying conditions.\n\
 There is NO WARRANTY, to the extent permitted by law.\n")"
 }
@@ -194,17 +193,26 @@ db_remove_delta()
 	return 1
 } # end db_remove_delta
 
+check_gpg() {
+	if ! type -p gpg >/dev/null; then
+		error "$(gettext "Cannot find the gpg binary! Is gnupg installed?")"
+		exit 1 # $E_MISSING_PROGRAM
+	fi
+}
+
 # sign the package database once repackaged
 create_signature() {
 	(( ! SIGN )) && return
 	local dbfile="$1"
 	local ret=0
 	msg "$(gettext "Signing database...")"
-	if ! type -p gpg; then
-		error "$(gettext "Cannot find the gpg binary! Is gnupg installed?")"
-		exit 1 # $E_MISSING_PROGRAM
+
+	local SIGNWITHKEY=""
+	if [[ -n $GPGKEY ]]; then
+		SIGNWITHKEY="-u ${GPGKEY}"
 	fi
-	gpg --detach-sign --use-agent "$dbfile" || ret=$?
+	gpg --detach-sign --use-agent ${SIGNWITHKEY} "$dbfile" &>/dev/null || ret=$?
+
 	if (( ! ret )); then
 		msg2 "$(gettext "Created signature file %s.")" "$dbfile.sig"
 	else
@@ -218,10 +226,7 @@ verify_signature() {
 	local dbfile="$1"
 	local ret=0
 	msg "$(gettext "Verifying database signature...")"
-	if ! type -p gpg; then
-		error "$(gettext "Cannot find the gpg binary! Is gnupg installed?")"
-		exit 1 # $E_MISSING_PROGRAM
-	fi
+
 	if [[ ! -f $dbfile.sig ]]; then
 		warning "$(gettext "No existing signature found, skipping verification.")"
 		return
@@ -542,26 +547,50 @@ trap 'trap_exit "$(gettext "An unknown error has occured. Exiting...")"' ERR
 
 success=0
 # parse arguments
-for arg in "$@"; do
-	case "$arg" in
+while [[ $# > 0 ]]; do
+	case "$1" in
 		-q|--quiet) QUIET=1;;
 		-d|--delta) DELTA=1;;
 		-f|--files) WITHFILES=1;;
-		-s|--sign) SIGN=1;;
-		-v|--verify) VERIFY=1;;
+		-s|--sign)
+			check_gpg
+			SIGN=1
+			if ! gpg --list-key ${GPGKEY} &>/dev/null; then
+				if [[ ! -z $GPGKEY ]]; then
+					error "$(gettext "The key ${GPGKEY} does not exist in your keyring.")"
+				else
+					error "$(gettext "There is no key in your keyring.")"
+				fi
+				exit 1
+			fi
+			;;
+		-k|--key)
+			check_gpg
+			shift
+			GPGKEY="$1"
+			if ! gpg --list-key ${GPGKEY} &>/dev/null; then
+				error "$(gettext "The key ${GPGKEY} does not exist in your keyring.")"
+				exit 1
+			fi
+			;;
+		-v|--verify)
+			check_gpg
+			VERIFY=1
+			;;
 		*)
 			if [[ -z $REPO_DB_FILE ]]; then
-				REPO_DB_FILE="$arg"
+				REPO_DB_FILE="$1"
 				LOCKFILE="$REPO_DB_FILE.lck"
 				check_repo_db
 			else
 				case "$cmd" in
-					repo-add) add $arg && success=1 ;;
-					repo-remove) remove $arg && success=1 ;;
+					repo-add) add $1 && success=1 ;;
+					repo-remove) remove $1 && success=1 ;;
 				esac
 			fi
 			;;
 	esac
+	shift
 done
 
 # if at least one operation was a success, re-zip database

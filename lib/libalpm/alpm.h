@@ -76,7 +76,6 @@ typedef enum _pgp_verify_t {
 
 typedef struct __pmdb_t pmdb_t;
 typedef struct __pmpkg_t pmpkg_t;
-typedef struct __pmpgpsig_t pmpgpsig_t;
 typedef struct __pmdelta_t pmdelta_t;
 typedef struct __pmgrp_t pmgrp_t;
 typedef struct __pmtrans_t pmtrans_t;
@@ -175,7 +174,7 @@ const char *alpm_option_get_dbpath(void);
 /** Sets the path to the database directory. */
 int alpm_option_set_dbpath(const char *dbpath);
 
-/** @name Accessors to the list of package cache directories
+/** @name Accessors to the list of package cache directories.
  * @{
  */
 alpm_list_t *alpm_option_get_cachedirs(void);
@@ -318,13 +317,14 @@ const char *alpm_db_get_name(const pmdb_t *db);
  */
 const char *alpm_db_get_url(const pmdb_t *db);
 
-/** Add a new server for a database.
- * An empty string or NULL can be passed to empty the current server list.
- * @param db database pointer
- * @param url url of the server
- * @return 0 on success, -1 on error (pm_errno is set accordingly)
+/** @name Accessors to the list of servers for a database.
+ * @{
  */
-int alpm_db_setserver(pmdb_t *db, const char *url);
+alpm_list_t *alpm_db_get_servers(const pmdb_t *db);
+int alpm_db_set_servers(pmdb_t *db, alpm_list_t *servers);
+int alpm_db_add_server(pmdb_t *db, const char *url);
+int alpm_db_remove_server(pmdb_t *db, const char *url);
+/** @} */
 
 int alpm_db_update(int level, pmdb_t *db);
 
@@ -383,11 +383,14 @@ int alpm_db_set_pkgreason(pmdb_t *db, const char *name, pmpkgreason_t reason);
  * The allocated structure should be freed using alpm_pkg_free().
  * @param filename location of the package tarball
  * @param full whether to stop the load after metadata is read or continue
- *             through the full archive
+ * through the full archive
+ * @param check_sig what level of package signature checking to perform on the
+ * package; note that this must be a '.sig' file type verification
  * @param pkg address of the package pointer
  * @return 0 on success, -1 on error (pm_errno is set accordingly)
  */
-int alpm_pkg_load(const char *filename, int full, pmpkg_t **pkg);
+int alpm_pkg_load(const char *filename, int full, pgp_verify_t check_sig,
+		pmpkg_t **pkg);
 
 /** Free a package.
  * @param pkg package pointer to free
@@ -475,8 +478,6 @@ const char *alpm_pkg_get_packager(pmpkg_t *pkg);
  * @return a reference to an internal string
  */
 const char *alpm_pkg_get_md5sum(pmpkg_t *pkg);
-
-const pmpgpsig_t *alpm_pkg_get_pgpsig(pmpkg_t *pkg);
 
 /** Returns the architecture for which the package was built.
  * @param pkg a pointer to package
@@ -567,9 +568,9 @@ alpm_list_t *alpm_pkg_get_files(pmpkg_t *pkg);
  */
 alpm_list_t *alpm_pkg_get_backup(pmpkg_t *pkg);
 
-/** Returns the database containing pkg
+/** Returns the database containing pkg.
  * Returns a pointer to the pmdb_t structure the package is
- * originating from, or NULL is the package was loaded from a file.
+ * originating from, or NULL if the package was loaded from a file.
  * @param pkg a pointer to package
  * @return a pointer to the DB containing pkg, or NULL.
  */
