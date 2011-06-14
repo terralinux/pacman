@@ -1,0 +1,562 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR Pacman Development Team <pacman-dev@archlinux.org>
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Arch Linux Pacman package manager\n"
+"Report-Msgid-Bugs-To: http://bugs.archlinux.org/index.php?project=3\n"
+"POT-Creation-Date: 2011-04-18 11:23-0500\n"
+"PO-Revision-Date: 2011-03-22 15:34+0000\n"
+"Last-Translator: giovanni <giovanni@archlinux.org>\n"
+"Language-Team: Italian <None>\n"
+"Language: it\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+
+#, c-format
+msgid "%s-%s is up to date -- skipping\n"
+msgstr "%s-%s è aggiornato, sarà ignorato\n"
+
+#, c-format
+msgid "%s-%s is up to date -- reinstalling\n"
+msgstr "%s-%s è aggiornato, sarà reinstallato\n"
+
+#, c-format
+msgid "downgrading package %s (%s => %s)\n"
+msgstr ""
+"installazione in corso di una versione meno recente del pacchetto %s (%s => "
+"%s)\n"
+
+#, c-format
+msgid "warning given when extracting %s (%s)\n"
+msgstr "è stato rilevato un warning durante l'estrazione di %s (%s)\n"
+
+#, c-format
+msgid "could not extract %s (%s)\n"
+msgstr "impossibile estrarre %s (%s)\n"
+
+#, c-format
+msgid ""
+"directory permissions differ on %s\n"
+"filesystem: %o  package: %o\n"
+msgstr ""
+"i permessi delle directory differiscono su %s\n"
+"filesystem: %o pacchetto: %o\n"
+
+#, c-format
+msgid "extract: not overwriting dir with file %s\n"
+msgstr "estrazione: non posso sovrascrivere la directory con il file %s\n"
+
+#, c-format
+msgid "extract: symlink %s does not point to dir\n"
+msgstr "estrazione: il link simbolico %s non punta alla directory\n"
+
+#, c-format
+msgid "could not rename %s to %s (%s)\n"
+msgstr "impossibile rinominare %s in %s (%s)\n"
+
+#, c-format
+msgid "%s saved as %s\n"
+msgstr "%s è stato salvato come %s\n"
+
+#, c-format
+msgid "could not install %s as %s (%s)\n"
+msgstr "impossibile installare %s come %s (%s)\n"
+
+#, c-format
+msgid "%s installed as %s\n"
+msgstr "%s installato come %s\n"
+
+#, c-format
+msgid "extracting %s as %s.pacnew\n"
+msgstr "estrazione di %s come %s.pacnew\n"
+
+#, c-format
+msgid "could not get current working directory\n"
+msgstr "impossibile determinare la directory corrente\n"
+
+#, c-format
+msgid "could not change directory to %s (%s)\n"
+msgstr "impossibile spostarsi nella directory %s (%s)\n"
+
+#, c-format
+msgid "problem occurred while upgrading %s\n"
+msgstr "si sono verificati degli errori durante l'aggiornamento di %s\n"
+
+#, c-format
+msgid "problem occurred while installing %s\n"
+msgstr "si sono verificati degli errori durante l'installazione di %s\n"
+
+#, c-format
+msgid "could not update database entry %s-%s\n"
+msgstr "impossibile aggiornare la voce %s-%s nel database\n"
+
+#, c-format
+msgid "could not add entry '%s' in cache\n"
+msgstr "impossible includere la voce '%s' nella cache\n"
+
+#, c-format
+msgid "removing invalid database: %s\n"
+msgstr "rimozione del database: %s\n"
+
+#, c-format
+msgid "invalid name for database entry '%s'\n"
+msgstr "nome non valido per la voce del database '%s'\n"
+
+#, c-format
+msgid "duplicated database entry '%s'\n"
+msgstr "la voce nel database '%s' è duplicata\n"
+
+#, c-format
+msgid "corrupted database entry '%s'\n"
+msgstr "la voce nel database '%s' è corrotta\n"
+
+#, c-format
+msgid "could not open file %s: %s\n"
+msgstr "impossibile aprire il file %s: %s\n"
+
+#, c-format
+msgid "%s database is inconsistent: name mismatch on package %s\n"
+msgstr ""
+"il database %s è inconsistente: il nome del pacchetto %s non corrisponde\n"
+
+#, c-format
+msgid "%s database is inconsistent: version mismatch on package %s\n"
+msgstr ""
+"il database %s è inconsistente: la versione del pacchetto %s non "
+"corrisponde\n"
+
+#, c-format
+msgid "could not create directory %s: %s\n"
+msgstr "impossibile creare la directory %s: %s\n"
+
+#, c-format
+msgid "could not parse package description file in %s\n"
+msgstr "impossibile analizzare il file di descrizione del pacchetto in %s\n"
+
+#, c-format
+msgid "missing package name in %s\n"
+msgstr "manca il nome del pacchetto in %s\n"
+
+#, c-format
+msgid "missing package version in %s\n"
+msgstr "manca la versione del pacchetto in %s\n"
+
+#, c-format
+msgid "error while reading package %s: %s\n"
+msgstr "si è verificato un errore durante la lettura del pacchetto %s: %s\n"
+
+#, c-format
+msgid "missing package metadata in %s\n"
+msgstr "manca il metadata del pacchetto in %s\n"
+
+#, c-format
+msgid "removing invalid file: %s\n"
+msgstr "rimozione del file non valido: %s\n"
+
+#, c-format
+msgid "database path is undefined\n"
+msgstr "il percorso del database non è stato definito\n"
+
+#, c-format
+msgid "dependency cycle detected:\n"
+msgstr "individuato un possibile ciclo di dipendenze:\n"
+
+#, c-format
+msgid "%s will be removed after its %s dependency\n"
+msgstr "%s sarà rimosso dopo la sua dipendenza %s\n"
+
+#, c-format
+msgid "%s will be installed before its %s dependency\n"
+msgstr "%s sarà installato prima della sua dipendenza %s\n"
+
+#, c-format
+msgid "ignoring package %s-%s\n"
+msgstr "sto ignorando il pacchetto %s-%s\n"
+
+#, c-format
+msgid "cannot resolve \"%s\", a dependency of \"%s\"\n"
+msgstr "impossibile risolvere \"%s\", una dipendenza di \"%s\"\n"
+
+#, c-format
+msgid "could not get filesystem information\n"
+msgstr "impossibile ottenere le informazioni relative al filesystem\n"
+
+#, c-format
+msgid "could not get filesystem information for %s: %s\n"
+msgstr ""
+"impossibile ottenere le informazione relative al filesystem per %s: %s\n"
+
+#, c-format
+msgid "could not determine mount point for file %s\n"
+msgstr "impossibile determinare il punto di montaggio del file %s\n"
+
+#, c-format
+msgid "could not determine filesystem mount points\n"
+msgstr "impossibile determinare i mount point del filesystem\n"
+
+#, c-format
+msgid "could not determine root mount point %s\n"
+msgstr "impossibile determinare il mount point di root %s\n"
+
+#, c-format
+msgid "Partition %s is mounted read only\n"
+msgstr "La partizione %s è montata in sola lettura\n"
+
+#, c-format
+msgid "Partition %s too full: %ld blocks needed, %ld blocks free\n"
+msgstr ""
+"La partizione %s è troppo piena: sono necessari %ld blocchi e ci sono solo "
+"%ld blocchi liberi\n"
+
+#, c-format
+msgid "disk"
+msgstr "disco"
+
+#, c-format
+msgid "url '%s' is invalid\n"
+msgstr "l'url '%s' non è esatto\n"
+
+#, c-format
+msgid "failed retrieving file '%s' from %s : %s\n"
+msgstr "impossibile scaricare il pacchetto '%s' da %s : %s\n"
+
+#, c-format
+msgid "resuming download of %s not possible; starting over\n"
+msgstr "impossibile riprendere il download di %s\n"
+
+#, c-format
+msgid "error writing to file '%s': %s\n"
+msgstr "si è verificato un errore durante la scrittura nel file '%s': %s\n"
+
+#, c-format
+msgid "failed retrieving file '%s' from %s\n"
+msgstr "impossibile scaricare il pacchetto '%s' da %s\n"
+
+#, c-format
+msgid "%s appears to be truncated: %jd/%jd bytes\n"
+msgstr "%s sembra essere incompleto: %jd/%jd byte\n"
+
+#, c-format
+msgid "failed to download %s\n"
+msgstr "impossibile scaricare %s\n"
+
+#, c-format
+msgid "out of memory!"
+msgstr "memoria insufficiente!"
+
+#, c-format
+msgid "unexpected system error"
+msgstr "errore di sistema inaspettato"
+
+#, c-format
+msgid "insufficient privileges"
+msgstr "privilegi insufficienti"
+
+#, c-format
+msgid "could not find or read file"
+msgstr "impossibile trovare o leggere il file"
+
+#, c-format
+msgid "could not find or read directory"
+msgstr "impossibile trovare o leggere la directory"
+
+#, c-format
+msgid "wrong or NULL argument passed"
+msgstr "è stato passato un argomento sbagliato o NULL"
+
+#, c-format
+msgid "not enough free disk space"
+msgstr "lo spazio libero sul disco non è sufficiente"
+
+#, c-format
+msgid "library not initialized"
+msgstr "la libreria non è stata inizializzata"
+
+#, c-format
+msgid "library already initialized"
+msgstr "la libreria è già stata inizializzata"
+
+#, c-format
+msgid "unable to lock database"
+msgstr "impossibile bloccare il database"
+
+#, c-format
+msgid "could not open database"
+msgstr "impossibile aprire il database"
+
+#, c-format
+msgid "could not create database"
+msgstr "impossibile creare il database"
+
+#, c-format
+msgid "database not initialized"
+msgstr "il database non è stato inizializzato"
+
+#, c-format
+msgid "database already registered"
+msgstr "il database è già stato registrato"
+
+#, c-format
+msgid "could not find database"
+msgstr "impossibile trovare il database"
+
+#, c-format
+msgid "database is incorrect version"
+msgstr "la versione del database non è esatta"
+
+#, c-format
+msgid "could not update database"
+msgstr "impossibile aggiornare il database"
+
+#, c-format
+msgid "could not remove database entry"
+msgstr "impossibile rimuovere la voce dal database"
+
+#, c-format
+msgid "invalid url for server"
+msgstr "url non valido per il server"
+
+#, c-format
+msgid "no servers configured for repository"
+msgstr "nessun server è stato configurato per il repository"
+
+#, c-format
+msgid "transaction already initialized"
+msgstr "l'operazione è già stata inizializzata"
+
+#, c-format
+msgid "transaction not initialized"
+msgstr "l'operazione non è stata inizializzata"
+
+#, c-format
+msgid "duplicate target"
+msgstr "pacchetto duplicato"
+
+#, c-format
+msgid "transaction not prepared"
+msgstr "l'operazione non è stata preparata"
+
+#, c-format
+msgid "transaction aborted"
+msgstr "l'operazione è stata annullata"
+
+#, c-format
+msgid "operation not compatible with the transaction type"
+msgstr "l'operazione è incompatibile con il tipo di transazione"
+
+#, c-format
+msgid "transaction commit attempt when database is not locked"
+msgstr "prova il commit dell'operazione quando il database non è bloccato"
+
+#, c-format
+msgid "could not find or read package"
+msgstr "impossibile trovare o leggere il pacchetto"
+
+#, c-format
+msgid "operation cancelled due to ignorepkg"
+msgstr "l'operazione è stata ignorata a causa di ignorepkg"
+
+#, c-format
+msgid "invalid or corrupted package"
+msgstr "il pacchetto non è valido oppure è corrotto"
+
+#, c-format
+msgid "cannot open package file"
+msgstr "impossibile aprire il pacchetto"
+
+#, c-format
+msgid "cannot remove all files for package"
+msgstr "impossibile rimuovere tutti i file del pacchetto"
+
+#, c-format
+msgid "package filename is not valid"
+msgstr "il nome del pacchetto non è valido"
+
+#, c-format
+msgid "package architecture is not valid"
+msgstr "l'architettura del pacchetto non è valida"
+
+#, c-format
+msgid "could not find repository for target"
+msgstr "impossibile trovare un repository contenente questo pacchetto"
+
+#, c-format
+msgid "invalid or corrupted delta"
+msgstr "il delta non è valido oppure è corrotto"
+
+#, c-format
+msgid "delta patch failed"
+msgstr "si sono verificati degli errori con la patch di delta"
+
+#, c-format
+msgid "could not satisfy dependencies"
+msgstr "impossibile soddisfare le dipendenze"
+
+#, c-format
+msgid "conflicting dependencies"
+msgstr "dipendenze in conflitto"
+
+#, c-format
+msgid "conflicting files"
+msgstr "file in conflitto"
+
+#, c-format
+msgid "failed to retrieve some files"
+msgstr "impossibile scaricare alcuni file"
+
+#, c-format
+msgid "failed to copy some file"
+msgstr "impossibile copiare alcuni file"
+
+#, c-format
+msgid "invalid regular expression"
+msgstr "l'espressione regolare non è valida"
+
+#, c-format
+msgid "libarchive error"
+msgstr "errore di libarchive"
+
+#, c-format
+msgid "download library error"
+msgstr "si è verificato un errore della libreria di download"
+
+#, c-format
+msgid "error invoking external downloader"
+msgstr "si è verificato un errore lanciando il downloader esterno"
+
+#, c-format
+msgid "unexpected error"
+msgstr "errore inaspettato"
+
+#, c-format
+msgid "database larger than maximum size\n"
+msgstr ""
+"la grandezza del database è superiore alla dimensione massima consentita\n"
+
+#, c-format
+msgid "could not find %s in database -- skipping\n"
+msgstr "impossibile trovare %s nel database, sarà ignorato\n"
+
+#, c-format
+msgid "removing %s from target list\n"
+msgstr "rimozione di %s dalla lista dei pacchetti\n"
+
+#, c-format
+msgid "cannot remove file '%s': %s\n"
+msgstr "impossibile rimuovere il file '%s': %s\n"
+
+#, c-format
+msgid "could not remove database entry %s-%s\n"
+msgstr "impossibile rimuovere la voce %s-%s dal database\n"
+
+#, c-format
+msgid "could not remove entry '%s' from cache\n"
+msgstr "impossibile rimuovere la voce '%s' dalla cache\n"
+
+#, c-format
+msgid "%s: ignoring package upgrade (%s => %s)\n"
+msgstr "%s: l'aggiornamento del pacchetto è stato ignorato (%s => %s)\n"
+
+#, c-format
+msgid "%s: ignoring package downgrade (%s => %s)\n"
+msgstr "%s: il downgrade del pacchetto è stato ignorato (%s => %s)\n"
+
+#, c-format
+msgid "%s: downgrading from version %s to version %s\n"
+msgstr "%s: downgrade in corso dalla versione %s alla versione %s\n"
+
+#, c-format
+msgid "%s: local (%s) is newer than %s (%s)\n"
+msgstr ""
+"%s: la versione installata (%s) è più recente di quella presente in %s (%s)\n"
+
+#, c-format
+msgid "ignoring package replacement (%s-%s => %s-%s)\n"
+msgstr "sto ignorando la sostituzione del pacchetto (%s-%s => %s-%s)\n"
+
+#, c-format
+msgid "cannot replace %s by %s\n"
+msgstr "impossibile sostituire %s con %s\n"
+
+#, c-format
+msgid "unresolvable package conflicts detected\n"
+msgstr "sono stati rilevati dei conflitti irrisolvibili\n"
+
+#, c-format
+msgid "removing '%s' from target list because it conflicts with '%s'\n"
+msgstr ""
+"rimozione di '%s' dalla lista dei pacchetti perché va in conflitto con '%s'\n"
+
+#, c-format
+msgid "failed to retrieve some files from %s\n"
+msgstr "impossibile scaricare alcuni file da %s\n"
+
+#, c-format
+msgid "could not commit removal transaction\n"
+msgstr "impossibile eseguire l'operazione di rimozione\n"
+
+#, c-format
+msgid "could not commit transaction\n"
+msgstr "impossibile eseguire l'operazione\n"
+
+#, c-format
+msgid "%s database version is too old\n"
+msgstr "la versione del database %s è troppo vecchia\n"
+
+#, c-format
+msgid "could not remove lock file %s\n"
+msgstr "impossibile rimuovere il file di lock %s\n"
+
+#, c-format
+msgid "could not create temp directory\n"
+msgstr "impossibile creare la directory temporanea\n"
+
+#, c-format
+msgid "could not copy tempfile to %s (%s)\n"
+msgstr "impossibile copiare il file temporaneo in %s (%s)\n"
+
+#, c-format
+msgid "could not remove tmpdir %s\n"
+msgstr "impossibile rimuovere la directory temporanea %s\n"
+
+#, c-format
+msgid "could not create pipe (%s)\n"
+msgstr "impossibile creare una pipe (%s)\n"
+
+#, c-format
+msgid "could not fork a new process (%s)\n"
+msgstr "impossibile effettuare il fork di un nuovo processo (%s)\n"
+
+#, c-format
+msgid "could not change the root directory (%s)\n"
+msgstr "impossibile cambiare la root directory (%s)\n"
+
+#, c-format
+msgid "call to execv failed (%s)\n"
+msgstr "impossibile chiamare execv (%s)\n"
+
+#, c-format
+msgid "call to waitpid failed (%s)\n"
+msgstr "chiamata a waitpid non riuscita (%s)\n"
+
+#, c-format
+msgid "could not open pipe (%s)\n"
+msgstr "impossibile aprire una pipe (%s)\n"
+
+#, c-format
+msgid "command failed to execute correctly\n"
+msgstr "l'esecuzione del comando non è riuscita correttamente\n"
+
+#, c-format
+msgid "no %s cache exists, creating...\n"
+msgstr "la cache di %s non esiste, creazione in corso...\n"
+
+#, c-format
+msgid "couldn't create package cache, using /tmp instead\n"
+msgstr ""
+"impossibile creare la cache del pacchetto, al suo posto sarà usata /tmp\n"

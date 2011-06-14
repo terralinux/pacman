@@ -1,0 +1,559 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR Pacman Development Team <pacman-dev@archlinux.org>
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Arch Linux Pacman package manager\n"
+"Report-Msgid-Bugs-To: http://bugs.archlinux.org/index.php?project=3\n"
+"POT-Creation-Date: 2011-04-18 11:23-0500\n"
+"PO-Revision-Date: 2011-03-22 15:34+0000\n"
+"Last-Translator: wonder <ibiru@archlinux.org>\n"
+"Language-Team: Romanian <>\n"
+"Language: ro\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1?0:(((n%100>19)||((n%100==0)&&(n!=0)))?"
+"2:1))\n"
+
+#, c-format
+msgid "%s-%s is up to date -- skipping\n"
+msgstr "%s-%s este actualizat -- se omite\n"
+
+#, c-format
+msgid "%s-%s is up to date -- reinstalling\n"
+msgstr "%s-%s este actualizat -- se reinstalează\n"
+
+#, c-format
+msgid "downgrading package %s (%s => %s)\n"
+msgstr "se retrogradează pachetul %s (%s => %s)\n"
+
+#, c-format
+msgid "warning given when extracting %s (%s)\n"
+msgstr "s-a primit o avertizare la extragerea %s (%s)\n"
+
+#, c-format
+msgid "could not extract %s (%s)\n"
+msgstr "nu se poate extrage %s (%s)\n"
+
+#, c-format
+msgid ""
+"directory permissions differ on %s\n"
+"filesystem: %o  package: %o\n"
+msgstr ""
+"permisiunile directorului diferă la %s\n"
+"pe disc: %o  pachet: %o\n"
+
+#, c-format
+msgid "extract: not overwriting dir with file %s\n"
+msgstr "extragere: nu se suprascrie dir cu fișierul %s\n"
+
+#, c-format
+msgid "extract: symlink %s does not point to dir\n"
+msgstr "extragere: symlink %s nu trimite la dir\n"
+
+#, c-format
+msgid "could not rename %s to %s (%s)\n"
+msgstr "nu se poate redenumi %s în %s (%s)\n"
+
+#, c-format
+msgid "%s saved as %s\n"
+msgstr "%s salvat ca %s\n"
+
+#, c-format
+msgid "could not install %s as %s (%s)\n"
+msgstr "nu se poate instala %s ca %s (%s)\n"
+
+#, c-format
+msgid "%s installed as %s\n"
+msgstr "%s instalat ca %s\n"
+
+#, c-format
+msgid "extracting %s as %s.pacnew\n"
+msgstr "se extrage %s ca %s.pacnew\n"
+
+#, c-format
+msgid "could not get current working directory\n"
+msgstr "nu s-a putut determina directorul de lucru curent\n"
+
+#, c-format
+msgid "could not change directory to %s (%s)\n"
+msgstr ""
+"nu s-a putut intra în directorul %s (%s)\n"
+"\n"
+
+#, c-format
+msgid "problem occurred while upgrading %s\n"
+msgstr "problemă apărută la actualizarea %s\n"
+
+#, c-format
+msgid "problem occurred while installing %s\n"
+msgstr "problemă apărută la instalarea %s\n"
+
+#, c-format
+msgid "could not update database entry %s-%s\n"
+msgstr "nu se poate actualiza în baza de date intrarea %s-%s\n"
+
+#, c-format
+msgid "could not add entry '%s' in cache\n"
+msgstr "nu se poate adăuga intrarea '%s' în cache\n"
+
+#, c-format
+msgid "removing invalid database: %s\n"
+msgstr "se elimină baza de date nevalidă %s\n"
+
+#, c-format
+msgid "invalid name for database entry '%s'\n"
+msgstr "nume pentru intrarea în baza de date nevalid '%s'\n"
+
+#, c-format
+msgid "duplicated database entry '%s'\n"
+msgstr "intrare duplicat în baza de date '%s'\n"
+
+#, c-format
+msgid "corrupted database entry '%s'\n"
+msgstr "intrare în baza de date coruptă  '%s'\n"
+
+#, c-format
+msgid "could not open file %s: %s\n"
+msgstr "nu poate fi deschis fișierul %s: %s\n"
+
+#, c-format
+msgid "%s database is inconsistent: name mismatch on package %s\n"
+msgstr ""
+"baza de date %s este inconsistentă: numele nu se potrivește cu pachetul %s\n"
+
+#, c-format
+msgid "%s database is inconsistent: version mismatch on package %s\n"
+msgstr ""
+"baza de date %s este inconsistentă: versiunea nu se potrivește cu pachetul "
+"%s\n"
+
+#, c-format
+msgid "could not create directory %s: %s\n"
+msgstr "nu poate fi creat director %s: %s\n"
+
+#, c-format
+msgid "could not parse package description file in %s\n"
+msgstr "nu a putut fi analizat fișierul de descriere a pachetului în %s\n"
+
+#, c-format
+msgid "missing package name in %s\n"
+msgstr "nume pachet lipsă în %s\n"
+
+#, c-format
+msgid "missing package version in %s\n"
+msgstr "versiune pachet lipsă în %s\n"
+
+#, c-format
+msgid "error while reading package %s: %s\n"
+msgstr "eroare la citirea pachetului %s: %s\n"
+
+#, c-format
+msgid "missing package metadata in %s\n"
+msgstr "lipsă metadate pentru pachet în %s\n"
+
+#, c-format
+msgid "removing invalid file: %s\n"
+msgstr "se elimină fișierul nevalid: %s\n"
+
+#, c-format
+msgid "database path is undefined\n"
+msgstr "calea bazei de date este nedefinită\n"
+
+#, c-format
+msgid "dependency cycle detected:\n"
+msgstr "a fost detectat un ciclu de dependență:\n"
+
+#, c-format
+msgid "%s will be removed after its %s dependency\n"
+msgstr "%s va fi eliminat înaintea dependenței sale %s\n"
+
+#, c-format
+msgid "%s will be installed before its %s dependency\n"
+msgstr "%s va fi instalat înaintea dependenței sale %s\n"
+
+#, c-format
+msgid "ignoring package %s-%s\n"
+msgstr "se ignoră pachetul %s-%s\n"
+
+#, c-format
+msgid "cannot resolve \"%s\", a dependency of \"%s\"\n"
+msgstr "nu se poate rezolva \"%s\", o dependență a \"%s\"\n"
+
+#, c-format
+msgid "could not get filesystem information\n"
+msgstr "nu s-au putut obține informații despre sistemul de fișiere\n"
+
+#, c-format
+msgid "could not get filesystem information for %s: %s\n"
+msgstr ""
+"nu s-au putut obține informații despre sistemul de fișiere pentru %s: %s\n"
+
+#, c-format
+msgid "could not determine mount point for file %s\n"
+msgstr "nu s-a putut determina locul de montare al fișierului %s\n"
+
+#, c-format
+msgid "could not determine filesystem mount points\n"
+msgstr "nu s-a putut determina locul de montare al sistemului de fișiere\n"
+
+#, c-format
+msgid "could not determine root mount point %s\n"
+msgstr "nu s-a putut determina locul de montare al partiției root %s\n"
+
+#, c-format
+msgid "Partition %s is mounted read only\n"
+msgstr "partiția %s este montată numai citire\n"
+
+#, c-format
+msgid "Partition %s too full: %ld blocks needed, %ld blocks free\n"
+msgstr "Partiția %s e plină: %ld blocuri necesare, %ld blocuri disponibile\n"
+
+#, c-format
+msgid "disk"
+msgstr "disc"
+
+#, c-format
+msgid "url '%s' is invalid\n"
+msgstr "URL '%s' este nevalid\n"
+
+#, c-format
+msgid "failed retrieving file '%s' from %s : %s\n"
+msgstr "eșec la obținerea fișierului '%s' din %s : %s\n"
+
+#, c-format
+msgid "resuming download of %s not possible; starting over\n"
+msgstr ""
+"nu se poate relua descărcarea pentru %s; se reîncepe\n"
+"\n"
+
+#, c-format
+msgid "error writing to file '%s': %s\n"
+msgstr "eroare la scriere în fișierul '%s': %s\n"
+
+#, c-format
+msgid "failed retrieving file '%s' from %s\n"
+msgstr "eșec la obținerea fișierului '%s' din %s\n"
+
+#, c-format
+msgid "%s appears to be truncated: %jd/%jd bytes\n"
+msgstr "%s pare a fi trunchiat: %jd/%jd bytes\n"
+
+#, c-format
+msgid "failed to download %s\n"
+msgstr "eșec la descărcarea %s\n"
+
+#, c-format
+msgid "out of memory!"
+msgstr "depășire de memorie!"
+
+#, c-format
+msgid "unexpected system error"
+msgstr "eroare de sistem neașteptată"
+
+#, c-format
+msgid "insufficient privileges"
+msgstr "privilegii insuficiente"
+
+#, c-format
+msgid "could not find or read file"
+msgstr " nu poate fi găsit sau citit fișierul"
+
+#, c-format
+msgid "could not find or read directory"
+msgstr "nu poate fi găsit sau citit directorul"
+
+#, c-format
+msgid "wrong or NULL argument passed"
+msgstr "furnizat argument greșit sau NULL "
+
+#, c-format
+msgid "not enough free disk space"
+msgstr "nu există destul spațiu liber pe disc"
+
+#, c-format
+msgid "library not initialized"
+msgstr "bibliotecă neinițializată"
+
+#, c-format
+msgid "library already initialized"
+msgstr "bibliotecă deja inițializată"
+
+#, c-format
+msgid "unable to lock database"
+msgstr "imposibilitate de a bloca baza de date"
+
+#, c-format
+msgid "could not open database"
+msgstr "nu poate fi deschisă baza de date"
+
+#, c-format
+msgid "could not create database"
+msgstr "nu poate fi creată baza de date"
+
+#, c-format
+msgid "database not initialized"
+msgstr "bază de date neinițializată"
+
+#, c-format
+msgid "database already registered"
+msgstr "bază de date deja înregistrată"
+
+#, c-format
+msgid "could not find database"
+msgstr "nu poate fi găsită baza de date"
+
+#, c-format
+msgid "database is incorrect version"
+msgstr "versiunea bazei de date este incorectă"
+
+#, c-format
+msgid "could not update database"
+msgstr "nu poate fi actualizată baza de date"
+
+#, c-format
+msgid "could not remove database entry"
+msgstr "nu poate fi eliminată intrarea în baza de date"
+
+#, c-format
+msgid "invalid url for server"
+msgstr "URL nevalid pentru server"
+
+#, c-format
+msgid "no servers configured for repository"
+msgstr "nu sunt servere configurate pentru depozit"
+
+#, c-format
+msgid "transaction already initialized"
+msgstr "tranzacție deja inițializată"
+
+#, c-format
+msgid "transaction not initialized"
+msgstr "tranzacție neinițializată"
+
+#, c-format
+msgid "duplicate target"
+msgstr "țintă duplicat"
+
+#, c-format
+msgid "transaction not prepared"
+msgstr "tranzacție nepregătită"
+
+#, c-format
+msgid "transaction aborted"
+msgstr "tranzacție abandonată"
+
+#, c-format
+msgid "operation not compatible with the transaction type"
+msgstr "operațiune incompatibilă cu tipul tranzacției"
+
+#, c-format
+msgid "transaction commit attempt when database is not locked"
+msgstr "efectuarea tranzacției așteaptă până baza de date nu va fi blocată"
+
+#, c-format
+msgid "could not find or read package"
+msgstr "pachetul nu poate fi găsit sau citit"
+
+#, c-format
+msgid "operation cancelled due to ignorepkg"
+msgstr "operație abandonată datorită ignorepkg"
+
+#, c-format
+msgid "invalid or corrupted package"
+msgstr "pachet nevalid sau corupt"
+
+#, c-format
+msgid "cannot open package file"
+msgstr "nu poate fi deschis fișierul pachet"
+
+#, c-format
+msgid "cannot remove all files for package"
+msgstr "nu pot fi eliminate toate fișierele din pachet"
+
+#, c-format
+msgid "package filename is not valid"
+msgstr "numele fișierului pachet este nevalid"
+
+#, c-format
+msgid "package architecture is not valid"
+msgstr "architectura pachetului este nevalidă"
+
+#, c-format
+msgid "could not find repository for target"
+msgstr "depozitul pentru țintă nu poate fi găsit"
+
+#, c-format
+msgid "invalid or corrupted delta"
+msgstr "delta invalid sau corupt"
+
+#, c-format
+msgid "delta patch failed"
+msgstr "patch delta eșuat"
+
+#, c-format
+msgid "could not satisfy dependencies"
+msgstr "nu pot fi satisfăcute dependențele"
+
+#, c-format
+msgid "conflicting dependencies"
+msgstr "dependențe în conflict"
+
+#, c-format
+msgid "conflicting files"
+msgstr "fișiere în conflict"
+
+#, c-format
+msgid "failed to retrieve some files"
+msgstr "eșec în obținerea unor fișiere"
+
+#, c-format
+msgid "failed to copy some file"
+msgstr "copierea unui fișier a eșuat"
+
+#, c-format
+msgid "invalid regular expression"
+msgstr "expresie regulată nevalidă"
+
+#, c-format
+msgid "libarchive error"
+msgstr "eroare libarchive"
+
+#, c-format
+msgid "download library error"
+msgstr "eroare în biblioteca de descărcare"
+
+#, c-format
+msgid "error invoking external downloader"
+msgstr "eroare la invocarea descărcătorului extern"
+
+#, c-format
+msgid "unexpected error"
+msgstr "eroare neașteptată"
+
+#, c-format
+msgid "database larger than maximum size\n"
+msgstr "baza de date e mai mare decât dimensiunea maximă\n"
+
+#, c-format
+msgid "could not find %s in database -- skipping\n"
+msgstr "nu poate fi găsit %s în baza de date -- se omite\n"
+
+#, c-format
+msgid "removing %s from target list\n"
+msgstr "se elimină '%s' din lista țintă\n"
+
+#, c-format
+msgid "cannot remove file '%s': %s\n"
+msgstr "nu poate fi eliminat fișierul '%s': %s\n"
+
+#, c-format
+msgid "could not remove database entry %s-%s\n"
+msgstr "nu se poate elimina intrarea în baza de date %s-%s\n"
+
+#, c-format
+msgid "could not remove entry '%s' from cache\n"
+msgstr "nu se poate elimina intrarea '%s' din cache\n"
+
+#, c-format
+msgid "%s: ignoring package upgrade (%s => %s)\n"
+msgstr "%s: se ignoră actualizarea pachetului (%s => %s)\n"
+
+#, c-format
+msgid "%s: ignoring package downgrade (%s => %s)\n"
+msgstr "%s: se ignoră retrogradarea pachetului (%s => %s)\n"
+
+#, c-format
+msgid "%s: downgrading from version %s to version %s\n"
+msgstr "%s: retrogradare de la versiunea %s la versiunea %s\n"
+
+#, c-format
+msgid "%s: local (%s) is newer than %s (%s)\n"
+msgstr "%s: (%s) local este mai nou decât %s (%s)\n"
+
+#, c-format
+msgid "ignoring package replacement (%s-%s => %s-%s)\n"
+msgstr "se ignoră înlocuirea pachetului (%s-%s => %s-%s)\n"
+
+#, c-format
+msgid "cannot replace %s by %s\n"
+msgstr "nu poate fi înlocuit %s de %s\n"
+
+#, c-format
+msgid "unresolvable package conflicts detected\n"
+msgstr "au fost detectate conflicte nerezolvabile în pachet\n"
+
+#, c-format
+msgid "removing '%s' from target list because it conflicts with '%s'\n"
+msgstr "se elimină '%s' din lista țintă deoarece este în conflict cu '%s'\n"
+
+#, c-format
+msgid "failed to retrieve some files from %s\n"
+msgstr "eșec în obținerea unor fișiere din %s\n"
+
+#, c-format
+msgid "could not commit removal transaction\n"
+msgstr "nu poate fi efectuată tranzacția de eliminare\n"
+
+#, c-format
+msgid "could not commit transaction\n"
+msgstr "nu poate fi efectuată tranzacția\n"
+
+#, c-format
+msgid "%s database version is too old\n"
+msgstr "versiunea %s a bazei de date e prea veche\n"
+
+#, c-format
+msgid "could not remove lock file %s\n"
+msgstr "nu poate fi eliminat fișierul de blocare %s\n"
+
+#, c-format
+msgid "could not create temp directory\n"
+msgstr "nu poate fi creat directorul temp\n"
+
+#, c-format
+msgid "could not copy tempfile to %s (%s)\n"
+msgstr "nu se poate copia tempfile la %s (%s)\n"
+
+#, c-format
+msgid "could not remove tmpdir %s\n"
+msgstr "nu poate fi eliminat tmpdir %s\n"
+
+#, c-format
+msgid "could not create pipe (%s)\n"
+msgstr "nu s-a putut crea țeava (%s)\n"
+
+#, c-format
+msgid "could not fork a new process (%s)\n"
+msgstr "nu se poate ramifica un nou proces (%s)\n"
+
+#, c-format
+msgid "could not change the root directory (%s)\n"
+msgstr "nu poate fi schimbat directorul root (%s)\n"
+
+#, c-format
+msgid "call to execv failed (%s)\n"
+msgstr "apelul la execv a eșuat (%s)\n"
+
+#, c-format
+msgid "call to waitpid failed (%s)\n"
+msgstr "cererea către waitpid a eșuat (%s)\n"
+
+#, c-format
+msgid "could not open pipe (%s)\n"
+msgstr "nu s-a putut deschide țeava (%s)\n"
+
+#, c-format
+msgid "command failed to execute correctly\n"
+msgstr "executarea corectă a comenzii a eșuat\n"
+
+#, c-format
+msgid "no %s cache exists, creating...\n"
+msgstr "nu există cache %s, se crează...\n"
+
+#, c-format
+msgid "couldn't create package cache, using /tmp instead\n"
+msgstr "nu se poate crea cache pachet, se folosește /tmp în schimb\n"

@@ -1,0 +1,12 @@
+.deps
+.libs
+cleanupdelta
+cleanupdelta.exe
+pactree
+pactree.exe
+testdb
+testdb.exe
+testpkg
+testpkg.exe
+vercmp
+vercmp.exe
