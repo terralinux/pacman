@@ -1,6 +1,8 @@
 # enforce that all scripts have a --help and --version option
 AUTOMAKE_OPTIONS = std-options
 
+SUBDIRS = po
+
 bin_SCRIPTS = \
 	$(OURSCRIPTS) \
 	repo-remove
@@ -21,10 +23,15 @@ EXTRA_DIST = \
 	pacman-optimize.sh.in \
 	pkgdelta.sh.in \
 	rankmirrors.sh.in \
-	repo-add.sh.in
+	repo-add.sh.in \
+	$(LIBRARY)
+
+LIBRARY = \
+	library/output_format.sh \
+	library/parse_options.sh
 
 # Files that should be removed, but which Automake does not know.
-MOSTLYCLEANFILES = $(bin_SCRIPTS) *.tmp
+MOSTLYCLEANFILES = $(bin_SCRIPTS)
 
 if USE_GIT_VERSION
 GIT_VERSION := $(shell sh -c 'git describe --abbrev=4 --dirty | sed s/^v//')
@@ -47,6 +54,7 @@ edit = sed \
 	-e 's|@SIZECMD[@]|$(SIZECMD)|g' \
 	-e 's|@SEDINPLACE[@]|$(SEDINPLACE)|g' \
 	-e 's|@DUPATH[@]|$(DUPATH)|g' \
+	-e 's|@SCRIPTNAME[@]|$@|g' \
 	-e 's|@configure_input[@]|Generated from $@.sh.in; do not edit by hand.|g'
 
 ## All the scripts depend on Makefile so that they are rebuilt when the
@@ -56,21 +64,35 @@ edit = sed \
 # third 'test' line- make sure one of the two checks succeeded
 $(OURSCRIPTS): Makefile
 	@echo '    ' GEN $@;
-	@rm -f $@ $@.tmp
-	@test -f $(srcdir)/$@.sh.in && $(edit) $(srcdir)/$@.sh.in >$@.tmp || true
-	@test -f $(srcdir)/$@.py.in && $(edit) $(srcdir)/$@.py.in >$@.tmp || true
-	@test -f $@.tmp || false
-	@chmod +x $@.tmp
-	@chmod a-w $@.tmp
-	@mv $@.tmp $@
+	@rm -f $@
+	@test -f $(srcdir)/$@.sh.in && m4 -P -I $(srcdir) $(srcdir)/$@.sh.in | $(edit) >$@
+	@chmod +x $@
+	@chmod a-w $@
 
-makepkg: $(srcdir)/makepkg.sh.in
-pacman-db-upgrade: $(srcdir)/pacman-db-upgrade.sh.in
-pacman-key: $(srcdir)/pacman-key.sh.in
+makepkg: \
+	$(srcdir)/makepkg.sh.in \
+	$(srcdir)/library/parse_options.sh
+
+pacman-db-upgrade: \
+	$(srcdir)/pacman-db-upgrade.sh.in \
+	$(srcdir)/library/output_format.sh
+
+pacman-key: \
+	$(srcdir)/pacman-key.sh.in \
+	$(srcdir)/library/output_format.sh
+
 pacman-optimize: $(srcdir)/pacman-optimize.sh.in
-pkgdelta: $(srcdir)/pkgdelta.sh.in
+
+pkgdelta: \
+	$(srcdir)/pkgdelta.sh.in \
+	$(srcdir)/library/output_format.sh
+
 rankmirrors: $(srcdir)/rankmirrors.sh.in
-repo-add: $(srcdir)/repo-add.sh.in
+
+repo-add: \
+	$(srcdir)/repo-add.sh.in \
+	$(srcdir)/library/output_format.sh
+
 repo-remove: $(srcdir)/repo-add.sh.in
 	rm -f repo-remove
 	$(LN_S) repo-add repo-remove

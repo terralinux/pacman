@@ -27,27 +27,12 @@
 #include "package.h"
 #include "alpm.h"
 
-/* Dependency */
-struct __pmdepend_t {
-	char *name;
-	char *version;
-	unsigned long name_hash;
-	pmdepmod_t mod;
-};
-
-/* Missing dependency */
-struct __pmdepmissing_t {
-	char *target;
-	pmdepend_t *depend;
-	char *causingpkg; /* this is used in case of remove dependency error only */
-};
-
 void _alpm_dep_free(pmdepend_t *dep);
 pmdepend_t *_alpm_dep_dup(const pmdepend_t *dep);
 void _alpm_depmiss_free(pmdepmissing_t *miss);
-alpm_list_t *_alpm_sortbydeps(alpm_list_t *targets, int reverse);
+alpm_list_t *_alpm_sortbydeps(pmhandle_t *handle, alpm_list_t *targets, int reverse);
 void _alpm_recursedeps(pmdb_t *db, alpm_list_t *targs, int include_explicit);
-int _alpm_resolvedeps(alpm_list_t *localpkgs, alpm_list_t *dbs_sync, pmpkg_t *pkg,
+int _alpm_resolvedeps(pmhandle_t *handle, alpm_list_t *localpkgs, pmpkg_t *pkg,
 		alpm_list_t *preferred, alpm_list_t **packages, alpm_list_t *remove,
 		alpm_list_t **data);
 pmdepend_t *_alpm_splitdep(const char *depstring);

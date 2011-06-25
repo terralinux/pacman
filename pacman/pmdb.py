@@ -17,41 +17,14 @@
 
 
 import os
+import shutil
+from StringIO import StringIO
 import tarfile
 
 import pmpkg
 import util
 
-def _mkfilelist(files):
-    """Generate a list of files from the list supplied as an argument.
-    
-    Each path is decomposed to generate the list of all directories leading
-    to the file.
-    
-    Example with 'usr/local/bin/dummy':
-    The resulting list will be
-        usr/
-        usr/local/
-        usr/local/bin/
-        usr/local/bin/dummy
-    """
-    file_set = set()
-    for f in files:
-        name = util.getfilename(f)
-        file_set.add(name)
-        while "/" in name:
-            [name, tmp] = name.rsplit("/", 1)
-            file_set.add(name + "/")
-    return sorted(file_set)
-
-def _mkbackuplist(backup):
-    """
-    """
-    return ["%s\t%s" % (util.getfilename(i), util.mkmd5sum(i)) for i in backup]
-
 def _getsection(fd):
-    """
-    """
     i = []
     while 1:
         line = fd.readline().strip("\n")
@@ -60,16 +33,16 @@ def _getsection(fd):
         i.append(line)
     return i
 
-def _mksection(title, data):
-    """
-    """
-    s = ""
-    if isinstance(data, list):
-        s = "\n".join(data)
+def make_section(data, title, values):
+    if not values:
+        return
+    data.append("%%%s%%" % title)
+    if isinstance(values, (list, tuple)):
+        data.extend(str(item) for item in values)
     else:
-        s = data
-    return "%%%s%%\n" \
-           "%s\n" % (title, s)
+        # just a single value
+        data.append(str(values))
+    data.append('\n')
 
 
 class pmdb(object):
@@ -78,39 +51,38 @@ class pmdb(object):
 
     def __init__(self, treename, root):
         self.treename = treename
+        self.root = root
         self.pkgs = []
         self.option = {}
         if self.treename == "local":
             self.dbdir = os.path.join(root, util.PM_DBPATH, treename)
+            self.dbfile = None
+            self.is_local = True
         else:
-            self.dbdir = os.path.join(root, util.PM_SYNCDBPATH, treename)
+            self.dbdir = None
             self.dbfile = os.path.join(root, util.PM_SYNCDBPATH, treename + ".db")
+            self.is_local = False
 
     def __str__(self):
         return "%s" % self.treename
 
     def getverify(self):
-        for value in "Always","Never","Optional":
+        for value in ("Always", "Never", "Optional"):
             if value in self.treename:
                 return value
         return "Never"
 
     def getpkg(self, name):
-        """
-        """
         for pkg in self.pkgs:
             if name == pkg.name:
                 return pkg
 
     def db_read(self, name):
-        """
-        """
-        path = self.dbdir
-        if not os.path.isdir(path):
+        if not self.dbdir or not os.path.isdir(self.dbdir):
             return None
 
         dbentry = ""
-        for roots, dirs, files in os.walk(path):
+        for roots, dirs, files in os.walk(self.dbdir):
             for i in dirs:
                 [pkgname, pkgver, pkgrel] = i.rsplit("-", 2)
                 if pkgname == name:
@@ -118,7 +90,7 @@ class pmdb(object):
                     break
         if not dbentry:
             return None
-        path = os.path.join(path, dbentry)
+        path = os.path.join(self.dbdir, dbentry)
 
         [pkgname, pkgver, pkgrel] = dbentry.rsplit("-", 2)
         pkg = pmpkg.pmpkg(pkgname, pkgver + "-" + pkgrel)
@@ -151,9 +123,17 @@ class pmdb(object):
             elif line == "%PACKAGER%":
                 pkg.packager = fd.readline().strip("\n")
             elif line == "%REASON%":
-                pkg.reason = int(fd.readline().strip("\n"))
+                try:
+                    pkg.reason = int(fd.readline().strip("\n"))
+                except ValueError:
+                    pkg.reason = -1
+                    raise
             elif line == "%SIZE%" or line == "%CSIZE%":
-                pkg.size = int(fd.readline().strip("\n"))
+                try:
+                    pkg.size = int(fd.readline().strip("\n"))
+                except ValueError:
+                    pkg.size = -1
+                    raise
             elif line == "%MD5SUM%":
                 pkg.md5sum = fd.readline().strip("\n")
             elif line == "%PGPSIG%":
@@ -199,102 +179,76 @@ class pmdb(object):
     # db_write is used to add both 'local' and 'sync' db entries
     #
     def db_write(self, pkg):
-        """
-        """
-        path = os.path.join(self.dbdir, pkg.fullname())
-        util.mkdir(path)
-
-        # desc
-        # for local db entries: name, version, desc, groups, url, license,
-        #                       arch, builddate, installdate, packager,
-        #                       size, reason, depends, conflicts, provides
-        # for sync entries: name, version, desc, groups, csize, md5sum,
-        #                   replaces, force, depends, conflicts, provides
-        data = [_mksection("NAME", pkg.name)]
-        data.append(_mksection("VERSION", pkg.version))
-        if pkg.desc:
-            data.append(_mksection("DESC", pkg.desc))
-        if pkg.groups:
-            data.append(_mksection("GROUPS", pkg.groups))
-        if pkg.license:
-            data.append(_mksection("LICENSE", pkg.license))
-        if pkg.arch:
-            data.append(_mksection("ARCH", pkg.arch))
-        if pkg.builddate:
-            data.append(_mksection("BUILDDATE", pkg.builddate))
-        if pkg.packager:
-            data.append(_mksection("PACKAGER", pkg.packager))
-        if pkg.depends:
-            data.append(_mksection("DEPENDS", pkg.depends))
-        if pkg.optdepends:
-            data.append(_mksection("OPTDEPENDS", pkg.optdepends))
-        if pkg.conflicts:
-            data.append(_mksection("CONFLICTS", pkg.conflicts))
-        if pkg.provides:
-            data.append(_mksection("PROVIDES", pkg.provides))
-        if self.treename == "local":
-            if pkg.url:
-                data.append(_mksection("URL", pkg.url))
-            if pkg.installdate:
-                data.append(_mksection("INSTALLDATE", pkg.installdate))
-            if pkg.size:
-                data.append(_mksection("SIZE", pkg.size))
-            if pkg.reason:
-                data.append(_mksection("REASON", pkg.reason))
+        entry = {}
+        # desc/depends type entries
+        data = []
+        make_section(data, "NAME", pkg.name)
+        make_section(data, "VERSION", pkg.version)
+        make_section(data, "DESC", pkg.desc)
+        make_section(data, "GROUPS", pkg.groups)
+        make_section(data, "LICENSE", pkg.license)
+        make_section(data, "ARCH", pkg.arch)
+        make_section(data, "BUILDDATE", pkg.builddate)
+        make_section(data, "PACKAGER", pkg.packager)
+        make_section(data, "DEPENDS", pkg.depends)
+        make_section(data, "OPTDEPENDS", pkg.optdepends)
+        make_section(data, "CONFLICTS", pkg.conflicts)
+        make_section(data, "PROVIDES", pkg.provides)
+        make_section(data, "URL", pkg.url)
+        if self.is_local:
+            make_section(data, "INSTALLDATE", pkg.installdate)
+            make_section(data, "SIZE", pkg.size)
+            make_section(data, "REASON", pkg.reason)
         else:
-            data.append(_mksection("FILENAME", pkg.filename()))
-            if pkg.replaces:
-                data.append(_mksection("REPLACES", pkg.replaces))
-            if pkg.csize:
-                data.append(_mksection("CSIZE", pkg.csize))
-            if pkg.md5sum:
-                data.append(_mksection("MD5SUM", pkg.md5sum))
-            if pkg.pgpsig:
-                data.append(_mksection("PGPSIG", pkg.pgpsig))
-        if data:
-            data.append("")
-        filename = os.path.join(path, "desc")
-        util.mkfile(filename, "\n".join(data))
+            make_section(data, "FILENAME", pkg.filename())
+            make_section(data, "REPLACES", pkg.replaces)
+            make_section(data, "CSIZE", pkg.csize)
+            make_section(data, "ISIZE", pkg.isize)
+            make_section(data, "MD5SUM", pkg.md5sum)
+            make_section(data, "PGPSIG", pkg.pgpsig)
 
-        # files
-        # for local entries, fields are: files, backup
-        # for sync ones: none
-        if self.treename == "local":
+        entry["desc"] = "\n".join(data) + "\n"
+
+        # files and install
+        if self.is_local:
             data = []
-            if pkg.files:
-                data.append(_mksection("FILES", _mkfilelist(pkg.files)))
-            if pkg.backup:
-                data.append(_mksection("BACKUP", _mkbackuplist(pkg.backup)))
-            if data:
-                data.append("")
-            filename = os.path.join(path, "files")
-            util.mkfile(filename, "\n".join(data))
+            make_section(data, "FILES", pkg.full_filelist())
+            make_section(data, "BACKUP", pkg.local_backup_entries())
+            entry["files"] = "\n".join(data) + "\n"
 
-        # install
-        if self.treename == "local":
-            empty = 1
-            for value in pkg.install.values():
-                if value:
-                    empty = 0
-            if not empty:
-                filename = os.path.join(path, "install")
-                util.mkinstallfile(filename, pkg.install)
+            if any(pkg.install.values()):
+                entry["install"] = pkg.installfile() + "\n"
 
-    def gensync(self):
-        """
-        """
+        return entry
 
-        if not self.dbfile:
-            return
-        curdir = os.getcwd()
-        os.chdir(self.dbdir)
+    def generate(self):
+        pkg_entries = [(pkg, self.db_write(pkg)) for pkg in self.pkgs]
 
-        # Generate database archive
-        tar = tarfile.open(self.dbfile, "w:gz")
-        for i in os.listdir("."):
-            tar.add(i)
-        tar.close()
+        if self.dbdir:
+            for pkg, entry in pkg_entries:
+                path = os.path.join(self.dbdir, pkg.fullname())
+                util.mkdir(path)
+                for name, data in entry.iteritems():
+                    filename = os.path.join(path, name)
+                    util.mkfile(filename, data)
 
-        os.chdir(curdir)
+        if self.dbfile:
+            tar = tarfile.open(self.dbfile, "w:gz")
+            for pkg, entry in pkg_entries:
+                # TODO: the addition of the directory is currently a
+                # requirement for successful reading of a DB by libalpm
+                info = tarfile.TarInfo(pkg.fullname())
+                info.type = tarfile.DIRTYPE
+                tar.addfile(info)
+                for name, data in entry.iteritems():
+                    filename = os.path.join(pkg.fullname(), name)
+                    info = tarfile.TarInfo(filename)
+                    info.size = len(data)
+                    tar.addfile(info, StringIO(data))
+            tar.close()
+            # TODO: this is a bit unnecessary considering only one test uses it
+            serverpath = os.path.join(self.root, util.SYNCREPO, self.treename)
+            util.mkdir(serverpath)
+            shutil.copy(self.dbfile, serverpath)
 
 # vim: set ts=4 sw=4 et:

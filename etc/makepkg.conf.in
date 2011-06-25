@@ -54,13 +54,16 @@ BUILDENV=(fakeroot !distcc color !ccache check !sign)
 #-- If using DistCC, your MAKEFLAGS will also need modification. In addition,
 #-- specify a space-delimited list of hosts running in the DistCC cluster.
 #DISTCC_HOSTS=""
+#
+#-- Specify a directory for package building.
+#BUILDDIR=/tmp/makepkg
 
 #########################################################################
 # GLOBAL PACKAGE OPTIONS
 #   These are default values for the options=() settings
 #########################################################################
 #
-# Default: OPTIONS=(strip docs libtool emptydirs zipman purge)
+# Default: OPTIONS=(strip docs libtool emptydirs zipman purge !upx)
 #  A negated option will do the opposite of the comments below.
 #
 #-- strip:     Strip symbols from binaries/libraries
@@ -69,8 +72,9 @@ BUILDENV=(fakeroot !distcc color !ccache check !sign)
 #-- emptydirs: Leave empty directories in packages
 #-- zipman:    Compress manual (man and info) pages in MAN_DIRS with gzip
 #-- purge:     Remove files specified by PURGE_TARGETS
+#-- upx:       Compress binary executable files using UPX
 #
-OPTIONS=(strip docs libtool emptydirs zipman purge)
+OPTIONS=(strip docs libtool emptydirs zipman purge !upx)
 
 #-- File integrity checks to use. Valid: md5, sha1, sha256, sha384, sha512
 INTEGRITY_CHECK=(md5)

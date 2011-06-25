@@ -60,15 +60,13 @@ int trans_init(pmtransflag_t flags)
 	}
 
 	if(ret == -1) {
+		enum _pmerrno_t err = alpm_errno(config->handle);
 		pm_fprintf(stderr, PM_LOG_ERROR, _("failed to init transaction (%s)\n"),
-				alpm_strerrorlast());
-		if(pm_errno == PM_ERR_HANDLE_LOCK) {
+				alpm_strerror(err));
+		if(err == PM_ERR_HANDLE_LOCK) {
 			fprintf(stderr, _("  if you're sure a package manager is not already\n"
 						"  running, you can remove %s\n"),
 					alpm_option_get_lockfile(config->handle));
-		}
-		else if(pm_errno == PM_ERR_DB_VERSION) {
-			fprintf(stderr, _("  try running pacman-db-upgrade\n"));
 		}
 
 		return -1;
@@ -80,7 +78,7 @@ int trans_release(void)
 {
 	if(alpm_trans_release(config->handle) == -1) {
 		pm_fprintf(stderr, PM_LOG_ERROR, _("failed to release transaction (%s)\n"),
-				alpm_strerrorlast());
+				alpm_strerror(alpm_errno(config->handle)));
 		return -1;
 	}
 	return 0;
@@ -107,7 +105,7 @@ int needs_root(void)
 static int flush_term_input(void) {
 #ifdef HAVE_TCFLUSH
 	if(isatty(fileno(stdin))) {
-		return(tcflush(fileno(stdin), TCIFLUSH));
+		return tcflush(fileno(stdin), TCIFLUSH);
 	}
 #endif
 
@@ -116,20 +114,28 @@ static int flush_term_input(void) {
 }
 
 /* gets the current screen column width */
-int getcols(int def)
+int getcols()
 {
+	int termwidth = -1;
+	const int default_tty = 80;
+	const int default_notty = 0;
+
+	if(!isatty(fileno(stdout))) {
+		return default_notty;
+	}
+
 #ifdef TIOCGSIZE
 	struct ttysize win;
 	if(ioctl(1, TIOCGSIZE, &win) == 0) {
-		return win.ts_cols;
+		termwidth = win.ts_cols;
 	}
 #elif defined(TIOCGWINSZ)
 	struct winsize win;
 	if(ioctl(1, TIOCGWINSZ, &win) == 0) {
-		return win.ws_col;
+		termwidth = win.ws_col;
 	}
 #endif
-	return def;
+	return termwidth <= 0 ? default_tty : termwidth;
 }
 
 /* does the same thing as 'rm -rf' */
@@ -225,14 +231,15 @@ void indentprint(const char *str, int indent)
 	wchar_t *wcstr;
 	const wchar_t *p;
 	int len, cidx;
-	const int cols = getcols(0);
+	const int cols = getcols();
 
 	if(!str) {
 		return;
 	}
 
-	/* if we're not a tty, print without indenting */
-	if(cols == 0) {
+	/* if we're not a tty, or our tty is not wide enough that wrapping even makes
+	 * sense, print without indenting */
+	if(cols == 0 || indent > cols) {
 		printf("%s", str);
 		return;
 	}
@@ -514,13 +521,13 @@ static alpm_list_t *table_create_format(const alpm_list_t *header,
 	alpm_list_free(longest_strs);
 
 	/* return NULL if terminal is not wide enough */
-	if(totalwidth > getcols(80)) {
+	if(totalwidth > getcols()) {
 		fprintf(stderr, _("insufficient columns available for table display\n"));
 		FREELIST(formats);
-		return(NULL);
+		return NULL;
 	}
 
-	return(formats);
+	return formats;
 }
 
 /** Displays the list in table format
@@ -540,12 +547,12 @@ int table_display(const char *title, const alpm_list_t *header,
 	alpm_list_t *formats;
 
 	if(rows == NULL || header == NULL) {
-		return(0);
+		return 0;
 	}
 
 	formats = table_create_format(header, rows);
 	if(formats == NULL) {
-		return(-1);
+		return -1;
 	}
 
 	if(title != NULL) {
@@ -560,7 +567,7 @@ int table_display(const char *title, const alpm_list_t *header,
 	}
 
 	FREELIST(formats);
-	return(0);
+	return 0;
 }
 
 void list_display(const char *title, const alpm_list_t *list)
@@ -576,12 +583,16 @@ void list_display(const char *title, const alpm_list_t *list)
 	if(!list) {
 		printf("%s\n", _("None"));
 	} else {
-		int cols;
-		const int maxcols = getcols(80);
-		for(i = list, cols = len; i; i = alpm_list_next(i)) {
-			char *str = alpm_list_getdata(i);
+		const int maxcols = getcols();
+		int cols = len;
+		const char *str = alpm_list_getdata(list);
+		printf("%s", str);
+		cols += string_length(str);
+		for(i = alpm_list_next(list); i; i = alpm_list_next(i)) {
+			const char *str = alpm_list_getdata(i);
 			int s = string_length(str);
-			if(cols + s + 2 >= maxcols) {
+			/* wrap only if we have enough usable column space */
+			if(maxcols > len && cols + s + 2 >= maxcols) {
 				int j;
 				cols = len;
 				printf("\n");
@@ -645,7 +656,7 @@ static alpm_list_t *create_verbose_header(int install)
 	pm_asprintf(&str, "%s", _("Size"));
 	res = alpm_list_add(res, str);
 
-	return(res);
+	return res;
 }
 
 /* returns package info as list of strings */
@@ -677,7 +688,7 @@ static alpm_list_t *create_verbose_row(pmpkg_t *pkg, int install)
 	pm_asprintf(&str, "%.2f %s", size, label);
 	ret = alpm_list_add(ret, str);
 
-	return(ret);
+	return ret;
 }
 
 /* prepare a list of pkgs to display */
@@ -782,22 +793,19 @@ static off_t pkg_get_size(pmpkg_t *pkg)
 
 static char *pkg_get_location(pmpkg_t *pkg)
 {
-	pmdb_t *db;
-	const char *dburl;
-	char *string;
+	alpm_list_t *servers;
+	char *string = NULL;
 	switch(config->op) {
 		case PM_OP_SYNC:
-			db = alpm_pkg_get_db(pkg);
-			dburl = alpm_db_get_url(db);
-			if(dburl) {
-				char *pkgurl = NULL;
-				pm_asprintf(&pkgurl, "%s/%s", dburl, alpm_pkg_get_filename(pkg));
-				return pkgurl;
+			servers = alpm_db_get_servers(alpm_pkg_get_db(pkg));
+			if(servers) {
+				pm_asprintf(&string, "%s/%s", alpm_list_getdata(servers),
+						alpm_pkg_get_filename(pkg));
+				return string;
 			}
 		case PM_OP_UPGRADE:
 			return strdup(alpm_pkg_get_filename(pkg));
 		default:
-			string = NULL;
 			pm_asprintf(&string, "%s-%s", alpm_pkg_get_name(pkg), alpm_pkg_get_version(pkg));
 			return string;
 	}
@@ -828,7 +836,7 @@ double humanize_size(off_t bytes, const char target_unit, int long_labels,
 	for(index = 0; index < unitcount - 1; index++) {
 		if(target_unit != '\0' && shortlabels[index][0] == target_unit) {
 			break;
-		} else if(target_unit == '\0' && val <= 2048.0) {
+		} else if(target_unit == '\0' && val <= 2048.0 && val >= -2048.0) {
 			break;
 		}
 		val /= 1024.0;
@@ -838,7 +846,7 @@ double humanize_size(off_t bytes, const char target_unit, int long_labels,
 		*label = labels[index];
 	}
 
-	return(val);
+	return val;
 }
 
 void print_packages(const alpm_list_t *packages)

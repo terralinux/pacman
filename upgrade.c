@@ -57,7 +57,7 @@ int pacman_upgrade(alpm_list_t *targets)
 			char *str = alpm_fetch_pkgurl(config->handle, i->data);
 			if(str == NULL) {
 				pm_fprintf(stderr, PM_LOG_ERROR, "'%s': %s\n",
-						(char *)i->data, alpm_strerrorlast());
+						(char *)i->data, alpm_strerror(alpm_errno(config->handle)));
 				return 1;
 			} else {
 				free(i->data);
@@ -76,15 +76,15 @@ int pacman_upgrade(alpm_list_t *targets)
 		char *targ = alpm_list_getdata(i);
 		pmpkg_t *pkg;
 
-		if(alpm_pkg_load(targ, 1, check_sig, &pkg) != 0) {
+		if(alpm_pkg_load(config->handle, targ, 1, check_sig, &pkg) != 0) {
 			pm_fprintf(stderr, PM_LOG_ERROR, "'%s': %s\n",
-					targ, alpm_strerrorlast());
+					targ, alpm_strerror(alpm_errno(config->handle)));
 			trans_release();
 			return 1;
 		}
-		if(alpm_add_pkg(pkg) == -1) {
+		if(alpm_add_pkg(config->handle, pkg) == -1) {
 			pm_fprintf(stderr, PM_LOG_ERROR, "'%s': %s\n",
-					targ, alpm_strerrorlast());
+					targ, alpm_strerror(alpm_errno(config->handle)));
 			alpm_pkg_free(pkg);
 			trans_release();
 			return 1;
@@ -94,9 +94,10 @@ int pacman_upgrade(alpm_list_t *targets)
 	/* Step 2: "compute" the transaction based on targets and flags */
 	/* TODO: No, compute nothing. This is stupid. */
 	if(alpm_trans_prepare(config->handle, &data) == -1) {
+		enum _pmerrno_t err = alpm_errno(config->handle);
 		pm_fprintf(stderr, PM_LOG_ERROR, _("failed to prepare transaction (%s)\n"),
-		        alpm_strerrorlast());
-		switch(pm_errno) {
+		        alpm_strerror(err));
+		switch(err) {
 			case PM_ERR_PKG_INVALID_ARCH:
 				for(i = data; i; i = alpm_list_next(i)) {
 					char *pkg = alpm_list_getdata(i);
@@ -106,28 +107,25 @@ int pacman_upgrade(alpm_list_t *targets)
 			case PM_ERR_UNSATISFIED_DEPS:
 				for(i = data; i; i = alpm_list_next(i)) {
 					pmdepmissing_t *miss = alpm_list_getdata(i);
-					pmdepend_t *dep = alpm_miss_get_dep(miss);
-					char *depstring = alpm_dep_compute_string(dep);
+					char *depstring = alpm_dep_compute_string(miss->depend);
 
 					/* TODO indicate if the error was a virtual package or not:
 					 *		:: %s: requires %s, provided by %s
 					 */
-					printf(_(":: %s: requires %s\n"), alpm_miss_get_target(miss),
-							depstring);
+					printf(_(":: %s: requires %s\n"), miss->target, depstring);
 					free(depstring);
 				}
 				break;
 			case PM_ERR_CONFLICTING_DEPS:
 				for(i = data; i; i = alpm_list_next(i)) {
 					pmconflict_t *conflict = alpm_list_getdata(i);
-					const char *package1 = alpm_conflict_get_package1(conflict);
-					const char *package2 = alpm_conflict_get_package2(conflict);
-					const char *reason = alpm_conflict_get_reason(conflict);
-					/* only print reason if it contains new information */
-					if(strcmp(package1, reason) == 0 || strcmp(package2, reason) == 0) {
-						printf(_(":: %s and %s are in conflict\n"), package1, package2);
+					if(strcmp(conflict->package1, conflict->reason) == 0 ||
+							strcmp(conflict->package2, conflict->reason) == 0) {
+						printf(_(":: %s and %s are in conflict\n"),
+								conflict->package1, conflict->package2);
 					} else {
-						printf(_(":: %s and %s are in conflict (%s)\n"), package1, package2, reason);
+						printf(_(":: %s and %s are in conflict (%s)\n"),
+								conflict->package1, conflict->package2, conflict->reason);
 					}
 				}
 				break;
@@ -140,15 +138,15 @@ int pacman_upgrade(alpm_list_t *targets)
 	}
 
 	/* Step 3: perform the installation */
+	alpm_list_t *packages = alpm_trans_get_add(config->handle);
 
 	if(config->print) {
-		print_packages(alpm_trans_get_add(config->handle));
+		print_packages(packages);
 		trans_release();
 		return 0;
 	}
 
 	/* print targets and ask user confirmation */
-	alpm_list_t *packages = alpm_trans_get_add(config->handle);
 	if(packages == NULL) { /* we are done */
 		printf(_(" there is nothing to do\n"));
 		trans_release();
@@ -164,24 +162,22 @@ int pacman_upgrade(alpm_list_t *targets)
 	}
 
 	if(alpm_trans_commit(config->handle, &data) == -1) {
+		enum _pmerrno_t err = alpm_errno(config->handle);
 		pm_fprintf(stderr, PM_LOG_ERROR, _("failed to commit transaction (%s)\n"),
-				alpm_strerrorlast());
-		switch(pm_errno) {
+				alpm_strerror(err));
+		switch(err) {
 			alpm_list_t *i;
 			case PM_ERR_FILE_CONFLICTS:
 				for(i = data; i; i = alpm_list_next(i)) {
 					pmfileconflict_t *conflict = alpm_list_getdata(i);
-					switch(alpm_fileconflict_get_type(conflict)) {
+					switch(conflict->type) {
 						case PM_FILECONFLICT_TARGET:
 							printf(_("%s exists in both '%s' and '%s'\n"),
-									alpm_fileconflict_get_file(conflict),
-									alpm_fileconflict_get_target(conflict),
-									alpm_fileconflict_get_ctarget(conflict));
+									conflict->file, conflict->target, conflict->ctarget);
 							break;
 						case PM_FILECONFLICT_FILESYSTEM:
 							printf(_("%s: %s exists in filesystem\n"),
-									alpm_fileconflict_get_target(conflict),
-									alpm_fileconflict_get_file(conflict));
+									conflict->target, conflict->file);
 							break;
 					}
 				}

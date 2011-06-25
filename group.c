@@ -34,8 +34,8 @@ pmgrp_t *_alpm_grp_new(const char *name)
 {
 	pmgrp_t* grp;
 
-	CALLOC(grp, 1, sizeof(pmgrp_t), RET_ERR(PM_ERR_MEMORY, NULL));
-	STRDUP(grp->name, name, RET_ERR(PM_ERR_MEMORY, NULL));
+	CALLOC(grp, 1, sizeof(pmgrp_t), return NULL);
+	STRDUP(grp->name, name, free(grp); return NULL);
 
 	return grp;
 }
@@ -52,19 +52,4 @@ void _alpm_grp_free(pmgrp_t *grp)
 	FREE(grp);
 }
 
-const char SYMEXPORT *alpm_grp_get_name(const pmgrp_t *grp)
-{
-	/* Sanity checks */
-	ASSERT(grp != NULL, return NULL);
-
-	return grp->name;
-}
-
-alpm_list_t SYMEXPORT *alpm_grp_get_pkgs(const pmgrp_t *grp)
-{
-	/* Sanity checks */
-	ASSERT(grp != NULL, return NULL);
-
-	return grp->packages;
-}
 /* vim: set ts=2 sw=2 noet: */

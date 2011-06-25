@@ -34,43 +34,6 @@
 #include "log.h"
 #include "graph.h"
 
-/** \addtogroup alpm_deltas Delta Functions
- * @brief Functions to manipulate libalpm deltas
- * @{
- */
-
-const char SYMEXPORT *alpm_delta_get_from(pmdelta_t *delta)
-{
-	ASSERT(delta != NULL, return NULL);
-	return delta->from;
-}
-
-const char SYMEXPORT *alpm_delta_get_to(pmdelta_t *delta)
-{
-	ASSERT(delta != NULL, return NULL);
-	return delta->to;
-}
-
-const char SYMEXPORT *alpm_delta_get_filename(pmdelta_t *delta)
-{
-	ASSERT(delta != NULL, return NULL);
-	return delta->delta;
-}
-
-const char SYMEXPORT *alpm_delta_get_md5sum(pmdelta_t *delta)
-{
-	ASSERT(delta != NULL, return NULL);
-	return delta->delta_md5;
-}
-
-off_t SYMEXPORT alpm_delta_get_size(pmdelta_t *delta)
-{
-	ASSERT(delta != NULL, return -1);
-	return delta->delta_size;
-}
-
-/** @} */
-
 static alpm_list_t *graph_init(alpm_list_t *deltas, int reverse)
 {
 	alpm_list_t *i, *j;
@@ -78,6 +41,10 @@ static alpm_list_t *graph_init(alpm_list_t *deltas, int reverse)
 	/* create the vertices */
 	for(i = deltas; i; i = i->next) {
 		pmgraph_t *v = _alpm_graph_new();
+		if(!v) {
+			alpm_list_free(vertices);
+			return NULL;
+		}
 		pmdelta_t *vdelta = i->data;
 		vdelta->download_size = vdelta->delta_size;
 		v->weight = LONG_MAX;
@@ -231,14 +198,14 @@ off_t _alpm_shortest_delta_path(pmhandle_t *handle, alpm_list_t *deltas,
 		return bestsize;
 	}
 
-	_alpm_log(PM_LOG_DEBUG, "started delta shortest-path search for '%s'\n", to);
+	_alpm_log(handle, PM_LOG_DEBUG, "started delta shortest-path search for '%s'\n", to);
 
 	vertices = graph_init(deltas, 0);
 	graph_init_size(handle, vertices);
 	dijkstra(vertices);
 	bestsize = shortest_path(vertices, to, &bestpath);
 
-	_alpm_log(PM_LOG_DEBUG, "delta shortest-path search complete : '%jd'\n", (intmax_t)bestsize);
+	_alpm_log(handle, PM_LOG_DEBUG, "delta shortest-path search complete : '%jd'\n", (intmax_t)bestsize);
 
 	alpm_list_free_inner(vertices, _alpm_graph_free);
 	alpm_list_free(vertices);
@@ -275,6 +242,11 @@ static alpm_list_t *find_unused(alpm_list_t *deltas, const char *to, off_t quota
 	return unused;
 }
 
+/** \addtogroup alpm_deltas Delta Functions
+ * @brief Functions to manipulate libalpm deltas
+ * @{
+ */
+
 alpm_list_t SYMEXPORT *alpm_pkg_unused_deltas(pmpkg_t *pkg)
 {
 	off_t pkgsize = alpm_pkg_get_size(pkg);
@@ -285,6 +257,7 @@ alpm_list_t SYMEXPORT *alpm_pkg_unused_deltas(pmpkg_t *pkg)
 	return unused;
 }
 
+/** @} */
 
 /** Parses the string representation of a pmdelta_t object.
  * This function assumes that the string is in the correct format.
@@ -311,17 +284,17 @@ pmdelta_t *_alpm_delta_parse(char *line)
 	}
 	regfree(&reg);
 
-	CALLOC(delta, 1, sizeof(pmdelta_t), RET_ERR(PM_ERR_MEMORY, NULL));
+	CALLOC(delta, 1, sizeof(pmdelta_t), return NULL);
 
 	tmp2 = tmp;
 	tmp = strchr(tmp, ' ');
 	*(tmp++) = '\0';
-	STRDUP(delta->delta, tmp2, RET_ERR(PM_ERR_MEMORY, NULL));
+	STRDUP(delta->delta, tmp2, return NULL);
 
 	tmp2 = tmp;
 	tmp = strchr(tmp, ' ');
 	*(tmp++) = '\0';
-	STRDUP(delta->delta_md5, tmp2, RET_ERR(PM_ERR_MEMORY, NULL));
+	STRDUP(delta->delta_md5, tmp2, return NULL);
 
 	tmp2 = tmp;
 	tmp = strchr(tmp, ' ');
@@ -331,23 +304,35 @@ pmdelta_t *_alpm_delta_parse(char *line)
 	tmp2 = tmp;
 	tmp = strchr(tmp, ' ');
 	*(tmp++) = '\0';
-	STRDUP(delta->from, tmp2, RET_ERR(PM_ERR_MEMORY, NULL));
+	STRDUP(delta->from, tmp2, return NULL);
 
 	tmp2 = tmp;
-	STRDUP(delta->to, tmp2, RET_ERR(PM_ERR_MEMORY, NULL));
-
-	_alpm_log(PM_LOG_DEBUG, "delta : %s %s '%jd'\n", delta->from, delta->to, (intmax_t)delta->delta_size);
+	STRDUP(delta->to, tmp2, return NULL);
 
 	return delta;
 }
 
 void _alpm_delta_free(pmdelta_t *delta)
 {
-	FREE(delta->from);
-	FREE(delta->to);
 	FREE(delta->delta);
 	FREE(delta->delta_md5);
+	FREE(delta->from);
+	FREE(delta->to);
 	FREE(delta);
+}
+
+pmdelta_t *_alpm_delta_dup(const pmdelta_t *delta)
+{
+	pmdelta_t *newdelta;
+	CALLOC(newdelta, 1, sizeof(pmdelta_t), return NULL);
+	STRDUP(newdelta->delta, delta->delta, return NULL);
+	STRDUP(newdelta->delta_md5, delta->delta_md5, return NULL);
+	STRDUP(newdelta->from, delta->from, return NULL);
+	STRDUP(newdelta->to, delta->to, return NULL);
+	newdelta->delta_size = delta->delta_size;
+	newdelta->download_size = delta->download_size;
+
+	return newdelta;
 }
 
 /* vim: set ts=2 sw=2 noet: */

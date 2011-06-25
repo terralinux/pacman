@@ -45,6 +45,7 @@ class pmpkg(object):
         self.packager = ""
         self.size = 0
         self.csize = 0
+        self.isize = 0
         self.reason = 0
         self.md5sum = ""      # sync only
         self.pgpsig = ""      # sync only
@@ -88,6 +89,17 @@ class pmpkg(object):
         """
         return "%s%s" % (self.fullname(), util.PM_EXT_PKG)
 
+    @staticmethod
+    def parse_filename(name):
+        filename = name
+        if filename[-1] == "*":
+            filename = filename.rstrip("*")
+        if filename.find(" -> ") != -1:
+            filename, extra = filename.split(" -> ")
+        elif filename.find("|") != -1:
+            filename, extra = filename.split("|")
+        return filename
+
     def makepkg(self, path):
         """Creates an Arch Linux package archive.
         
@@ -103,7 +115,7 @@ class pmpkg(object):
         # Generate package file system
         for f in self.files:
             util.mkfile(f, f)
-            self.size += os.lstat(util.getfilename(f))[stat.ST_SIZE]
+            self.size += os.lstat(self.parse_filename(f))[stat.ST_SIZE]
 
         # .PKGINFO
         data = ["pkgname = %s" % self.name]
@@ -135,7 +147,7 @@ class pmpkg(object):
 
         # .INSTALL
         if any(self.install.values()):
-            util.mkinstallfile(".INSTALL", self.install)
+            util.mkfile(".INSTALL", self.installfile())
 
         # safely create the dir
         util.mkdir(os.path.dirname(self.path))
@@ -148,5 +160,38 @@ class pmpkg(object):
 
         os.chdir(curdir)
         shutil.rmtree(tmpdir)
+
+    def full_filelist(self):
+        """Generate a list of package files.
+
+        Each path is decomposed to generate the list of all directories leading
+        to the file.
+
+        Example with 'usr/local/bin/dummy':
+        The resulting list will be:
+            usr/
+            usr/local/
+            usr/local/bin/
+            usr/local/bin/dummy
+        """
+        file_set = set()
+        for name in self.files:
+            name = self.parse_filename(name)
+            file_set.add(name)
+            while "/" in name:
+                name, tmp = name.rsplit("/", 1)
+                file_set.add(name + "/")
+        return sorted(file_set)
+
+    def local_backup_entries(self):
+        return ["%s\t%s" % (self.parse_filename(i), util.mkmd5sum(i)) for i in self.backup]
+
+    def installfile(self):
+        data = []
+        for key, value in self.install.iteritems():
+            if value:
+                data.append("%s() {\n%s\n}\n" % (key, value))
+
+        return "\n".join(data)
 
 # vim: set ts=4 sw=4 et:

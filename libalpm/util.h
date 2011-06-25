@@ -29,6 +29,7 @@
 #include "alpm_list.h"
 #include "alpm.h"
 #include "package.h" /* pmpkg_t */
+#include "handle.h" /* pmhandle_t */
 
 #include <stdio.h>
 #include <string.h>
@@ -48,7 +49,7 @@
 #define _(s) s
 #endif
 
-#define ALLOC_FAIL(s) do { _alpm_log(PM_LOG_ERROR, _("alloc failure: could not allocate %zd bytes\n"), s); } while(0)
+#define ALLOC_FAIL(s) do { fprintf(stderr, "alloc failure: could not allocate %zd bytes\n", s); } while(0)
 
 #define MALLOC(p, s, action) do { p = calloc(1, s); if(p == NULL) { ALLOC_FAIL(s); action; } } while(0)
 #define CALLOC(p, l, s, action) do { p = calloc(l, s); if(p == NULL) { ALLOC_FAIL(s); action; } } while(0)
@@ -60,15 +61,19 @@
 
 #define ASSERT(cond, action) do { if(!(cond)) { action; } } while(0)
 
-#define RET_ERR_VOID(err) do { pm_errno = (err); \
-	_alpm_log(PM_LOG_DEBUG, "returning error %d from %s : %s\n", err, __func__, alpm_strerrorlast()); \
+#define RET_ERR_VOID(handle, err) do { \
+	_alpm_log(handle, PM_LOG_DEBUG, "returning error %d from %s : %s\n", err, __func__, alpm_strerror(err)); \
+	(handle)->pm_errno = (err); \
 	return; } while(0)
 
-#define RET_ERR(err, ret) do { pm_errno = (err); \
-	_alpm_log(PM_LOG_DEBUG, "returning error %d from %s : %s\n", err, __func__, alpm_strerrorlast()); \
+#define RET_ERR(handle, err, ret) do { \
+	_alpm_log(handle, PM_LOG_DEBUG, "returning error %d from %s : %s\n", err, __func__, alpm_strerror(err)); \
+	(handle)->pm_errno = (err); \
 	return (ret); } while(0)
 
 #define DOUBLE_EQ(x, y) (fabs((x) - (y)) < DBL_EPSILON)
+
+#define CHECK_HANDLE(handle, action) do { if(!(handle)) { action; } (handle)->pm_errno = 0; } while(0)
 
 /**
  * Used as a buffer/state holder for _alpm_archive_fgets().
@@ -90,8 +95,10 @@ int _alpm_makepath(const char *path);
 int _alpm_makepath_mode(const char *path, mode_t mode);
 int _alpm_copyfile(const char *src, const char *dest);
 char *_alpm_strtrim(char *str);
-int _alpm_unpack_single(const char *archive, const char *prefix, const char *fn);
-int _alpm_unpack(const char *archive, const char *prefix, alpm_list_t *list, int breakfirst);
+int _alpm_unpack_single(pmhandle_t *handle, const char *archive,
+		const char *prefix, const char *filename);
+int _alpm_unpack(pmhandle_t *handle, const char *archive, const char *prefix,
+		alpm_list_t *list, int breakfirst);
 int _alpm_rmrf(const char *path);
 int _alpm_logaction(pmhandle_t *handle, const char *fmt, va_list args);
 int _alpm_run_chroot(pmhandle_t *handle, const char *path, char *const argv[]);

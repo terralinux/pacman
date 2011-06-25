@@ -30,6 +30,7 @@
 #include <time.h> /* time_t */
 
 #include "alpm.h"
+#include "backup.h"
 #include "db.h"
 #include "signing.h"
 
@@ -141,13 +142,15 @@ pmpkg_t *_alpm_pkg_dup(pmpkg_t *pkg);
 void _alpm_pkg_free(pmpkg_t *pkg);
 void _alpm_pkg_free_trans(pmpkg_t *pkg);
 
-pmpkg_t *_alpm_pkg_load_internal(const char *filename, int full,
-		const char *md5sum, const char *base64_sig, pgp_verify_t check_sig);
+
+pmpkg_t *_alpm_pkg_load_internal(pmhandle_t *handle, const char *pkgfile,
+		int full, const char *md5sum, const char *base64_sig,
+		pgp_verify_t check_sig);
 
 int _alpm_pkg_cmp(const void *p1, const void *p2);
 int _alpm_pkg_compare_versions(pmpkg_t *local_pkg, pmpkg_t *pkg);
 pmpkg_t *_alpm_pkg_find(alpm_list_t *haystack, const char *needle);
-int _alpm_pkg_should_ignore(pmpkg_t *pkg);
+int _alpm_pkg_should_ignore(pmhandle_t *handle, pmpkg_t *pkg);
 
 #endif /* _ALPM_PACKAGE_H */
 

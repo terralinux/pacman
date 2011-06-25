@@ -220,7 +220,7 @@ static int sync_cleancache(int level)
 			/* attempt to load the package, prompt removal on failures as we may have
 			 * files here that aren't valid packages. we also don't need a full
 			 * load of the package, just the metadata. */
-			if(alpm_pkg_load(path, 0, PM_PGP_VERIFY_NEVER, &localpkg) != 0
+			if(alpm_pkg_load(config->handle, path, 0, PM_PGP_VERIFY_NEVER, &localpkg) != 0
 					|| localpkg == NULL) {
 				if(yesno(_("File %s does not seem to be a valid package, remove it?"),
 							path)) {
@@ -283,17 +283,13 @@ static int sync_synctree(int level, alpm_list_t *syncs)
 	alpm_list_t *i;
 	int success = 0, ret;
 
-	if(trans_init(0) == -1) {
-		return 0;
-	}
-
 	for(i = syncs; i; i = alpm_list_next(i)) {
 		pmdb_t *db = alpm_list_getdata(i);
 
 		ret = alpm_db_update((level < 2 ? 0 : 1), db);
 		if(ret < 0) {
 			pm_fprintf(stderr, PM_LOG_ERROR, _("failed to update %s (%s)\n"),
-					alpm_db_get_name(db), alpm_strerrorlast());
+					alpm_db_get_name(db), alpm_strerror(alpm_errno(config->handle)));
 		} else if(ret == 1) {
 			printf(_(" %s is up to date\n"), alpm_db_get_name(db));
 			success++;
@@ -302,9 +298,6 @@ static int sync_synctree(int level, alpm_list_t *syncs)
 		}
 	}
 
-	if(trans_release() == -1) {
-		return 0;
-	}
 	/* We should always succeed if at least one DB was upgraded - we may possibly
 	 * fail later with unresolved deps, but that should be rare, and would be
 	 * expected
@@ -409,7 +402,7 @@ static int sync_group(int level, alpm_list_t *syncs, alpm_list_t *targets)
 
 				if(grp) {
 					/* get names of packages in group */
-					for(k = alpm_grp_get_pkgs(grp); k; k = alpm_list_next(k)) {
+					for(k = grp->packages; k; k = alpm_list_next(k)) {
 						if(!config->quiet) {
 							printf("%s %s\n", grpname,
 									alpm_pkg_get_name(alpm_list_getdata(k)));
@@ -426,16 +419,15 @@ static int sync_group(int level, alpm_list_t *syncs, alpm_list_t *targets)
 
 			for(j = alpm_db_get_grpcache(db); j; j = alpm_list_next(j)) {
 				pmgrp_t *grp = alpm_list_getdata(j);
-				const char *grpname = alpm_grp_get_name(grp);
 
 				if(level > 1) {
-					for(k = alpm_grp_get_pkgs(grp); k; k = alpm_list_next(k)) {
-						printf("%s %s\n", grpname,
+					for(k = grp->packages; k; k = alpm_list_next(k)) {
+						printf("%s %s\n", grp->name,
 								alpm_pkg_get_name(alpm_list_getdata(k)));
 					}
 				} else {
 					/* print grp names only, no package names */
-					printf("%s\n", grpname);
+					printf("%s\n", grp->name);
 				}
 			}
 		}
@@ -620,17 +612,18 @@ static pmdb_t *get_db(const char *dbname)
 
 static int process_pkg(pmpkg_t *pkg)
 {
-	int ret = alpm_add_pkg(pkg);
+	int ret = alpm_add_pkg(config->handle, pkg);
 
 	if(ret == -1) {
-		if(pm_errno == PM_ERR_TRANS_DUP_TARGET
-				|| pm_errno == PM_ERR_PKG_IGNORED) {
+		enum _pmerrno_t err = alpm_errno(config->handle);
+		if(err == PM_ERR_TRANS_DUP_TARGET
+				|| err == PM_ERR_PKG_IGNORED) {
 			/* just skip duplicate or ignored targets */
 			pm_printf(PM_LOG_WARNING, _("skipping target: %s\n"), alpm_pkg_get_name(pkg));
 			return 0;
 		} else {
 			pm_fprintf(stderr, PM_LOG_ERROR, "'%s': %s\n", alpm_pkg_get_name(pkg),
-					alpm_strerrorlast());
+					alpm_strerror(err));
 			return 1;
 		}
 	}
@@ -685,12 +678,13 @@ cleanup:
 
 static int process_targname(alpm_list_t *dblist, char *targname)
 {
-	pmpkg_t *pkg = alpm_find_dbs_satisfier(dblist, targname);
+	pmpkg_t *pkg = alpm_find_dbs_satisfier(config->handle, dblist, targname);
 
-	/* #FS23342 - skip ignored packages when user says no */
-	if(pm_errno == PM_ERR_PKG_IGNORED) {
+	/* #FS#23342 - skip ignored packages when user says no */
+	if(alpm_errno(config->handle) == PM_ERR_PKG_IGNORED) {
 			pm_printf(PM_LOG_WARNING, _("skipping target: %s\n"), targname);
-			pm_errno = 0;
+			/* TODO how to do this, we shouldn't be fucking with it from the frontend */
+			/* pm_errno = 0; */
 			return 0;
 	}
 
@@ -761,7 +755,7 @@ static int sync_trans(alpm_list_t *targets)
 		printf(_(":: Starting full system upgrade...\n"));
 		alpm_logaction(config->handle, "starting full system upgrade\n");
 		if(alpm_sync_sysupgrade(config->handle, config->op_s_upgrade >= 2) == -1) {
-			pm_fprintf(stderr, PM_LOG_ERROR, "%s\n", alpm_strerrorlast());
+			pm_fprintf(stderr, PM_LOG_ERROR, "%s\n", alpm_strerror(alpm_errno(config->handle)));
 			retval = 1;
 			goto cleanup;
 		}
@@ -769,9 +763,10 @@ static int sync_trans(alpm_list_t *targets)
 
 	/* Step 2: "compute" the transaction based on targets and flags */
 	if(alpm_trans_prepare(config->handle, &data) == -1) {
+		enum _pmerrno_t err = alpm_errno(config->handle);
 		pm_fprintf(stderr, PM_LOG_ERROR, _("failed to prepare transaction (%s)\n"),
-		        alpm_strerrorlast());
-		switch(pm_errno) {
+		        alpm_strerror(err));
+		switch(err) {
 			alpm_list_t *i;
 			case PM_ERR_PKG_INVALID_ARCH:
 				for(i = data; i; i = alpm_list_next(i)) {
@@ -782,24 +777,22 @@ static int sync_trans(alpm_list_t *targets)
 			case PM_ERR_UNSATISFIED_DEPS:
 				for(i = data; i; i = alpm_list_next(i)) {
 					pmdepmissing_t *miss = alpm_list_getdata(i);
-					pmdepend_t *dep = alpm_miss_get_dep(miss);
-					char *depstring = alpm_dep_compute_string(dep);
-					printf(_(":: %s: requires %s\n"), alpm_miss_get_target(miss),
-							depstring);
+					char *depstring = alpm_dep_compute_string(miss->depend);
+					printf(_(":: %s: requires %s\n"), miss->target, depstring);
 					free(depstring);
 				}
 				break;
 			case PM_ERR_CONFLICTING_DEPS:
 				for(i = data; i; i = alpm_list_next(i)) {
 					pmconflict_t *conflict = alpm_list_getdata(i);
-					const char *package1 = alpm_conflict_get_package1(conflict);
-					const char *package2 = alpm_conflict_get_package2(conflict);
-					const char *reason = alpm_conflict_get_reason(conflict);
 					/* only print reason if it contains new information */
-					if(strcmp(package1, reason) == 0 || strcmp(package2, reason) == 0) {
-						printf(_(":: %s and %s are in conflict\n"), package1, package2);
+					if(strcmp(conflict->package1, conflict->reason) == 0 ||
+							strcmp(conflict->package2, conflict->reason) == 0) {
+						printf(_(":: %s and %s are in conflict\n"),
+								conflict->package1, conflict->package2);
 					} else {
-						printf(_(":: %s and %s are in conflict (%s)\n"), package1, package2, reason);
+						printf(_(":: %s and %s are in conflict (%s)\n"),
+								conflict->package1, conflict->package2, conflict->reason);
 					}
 				}
 				break;
@@ -838,24 +831,22 @@ static int sync_trans(alpm_list_t *targets)
 	}
 
 	if(alpm_trans_commit(config->handle, &data) == -1) {
+		enum _pmerrno_t err = alpm_errno(config->handle);
 		pm_fprintf(stderr, PM_LOG_ERROR, _("failed to commit transaction (%s)\n"),
-		        alpm_strerrorlast());
-		switch(pm_errno) {
+		        alpm_strerror(err));
+		switch(err) {
 			alpm_list_t *i;
 			case PM_ERR_FILE_CONFLICTS:
 				for(i = data; i; i = alpm_list_next(i)) {
 					pmfileconflict_t *conflict = alpm_list_getdata(i);
-					switch(alpm_fileconflict_get_type(conflict)) {
+					switch(conflict->type) {
 						case PM_FILECONFLICT_TARGET:
 							printf(_("%s exists in both '%s' and '%s'\n"),
-									alpm_fileconflict_get_file(conflict),
-									alpm_fileconflict_get_target(conflict),
-									alpm_fileconflict_get_ctarget(conflict));
+									conflict->file, conflict->target, conflict->ctarget);
 							break;
 						case PM_FILECONFLICT_FILESYSTEM:
 							printf(_("%s: %s exists in filesystem\n"),
-									alpm_fileconflict_get_target(conflict),
-									alpm_fileconflict_get_file(conflict));
+									conflict->target, conflict->file);
 							break;
 					}
 				}
@@ -913,7 +904,7 @@ int pacman_sync(alpm_list_t *targets)
 
 	/* ensure we have at least one valid sync db set up */
 	sync_dbs = alpm_option_get_syncdbs(config->handle);
-	if(sync_dbs == NULL || alpm_list_count(sync_dbs) == 0) {
+	if(sync_dbs == NULL) {
 		pm_printf(PM_LOG_ERROR, _("no usable package repositories configured.\n"));
 		return 1;
 	}

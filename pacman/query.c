@@ -79,7 +79,7 @@ static int search_path(char **filename, struct stat *bufptr)
 		fullname = malloc(plen + flen + 2);
 		if(!fullname) {
 			free(envpath);
-			return(-1);
+			return -1;
 		}
 		sprintf(fullname, "%s/%s", path, *filename);
 
@@ -304,14 +304,11 @@ static int query_group(alpm_list_t *targets)
 	if(targets == NULL) {
 		for(j = alpm_db_get_grpcache(db_local); j; j = alpm_list_next(j)) {
 			pmgrp_t *grp = alpm_list_getdata(j);
-			const alpm_list_t *p, *packages;
-			const char *grpname;
+			const alpm_list_t *p;
 
-			grpname = alpm_grp_get_name(grp);
-			packages = alpm_grp_get_pkgs(grp);
-
-			for(p = packages; p; p = alpm_list_next(p)) {
-				printf("%s %s\n", grpname, alpm_pkg_get_name(alpm_list_getdata(p)));
+			for(p = grp->packages; p; p = alpm_list_next(p)) {
+				pmpkg_t *pkg = alpm_list_getdata(p);
+				printf("%s %s\n", grp->name, alpm_pkg_get_name(pkg));
 			}
 		}
 	} else {
@@ -320,8 +317,8 @@ static int query_group(alpm_list_t *targets)
 			grpname = alpm_list_getdata(i);
 			grp = alpm_db_readgrp(db_local, grpname);
 			if(grp) {
-				const alpm_list_t *p, *packages = alpm_grp_get_pkgs(grp);
-				for(p = packages; p; p = alpm_list_next(p)) {
+				const alpm_list_t *p;
+				for(p = grp->packages; p; p = alpm_list_next(p)) {
 					if(!config->quiet) {
 						printf("%s %s\n", grpname,
 								alpm_pkg_get_name(alpm_list_getdata(p)));
@@ -505,7 +502,7 @@ int pacman_query(alpm_list_t *targets)
 	if(config->op_q_foreign) {
 		/* ensure we have at least one valid sync db set up */
 		alpm_list_t *sync_dbs = alpm_option_get_syncdbs(config->handle);
-		if(sync_dbs == NULL || alpm_list_count(sync_dbs) == 0) {
+		if(sync_dbs == NULL) {
 			pm_printf(PM_LOG_ERROR, _("no usable package repositories configured.\n"));
 			return 1;
 		}
@@ -552,7 +549,7 @@ int pacman_query(alpm_list_t *targets)
 		char *strname = alpm_list_getdata(i);
 
 		if(config->op_q_isfile) {
-			alpm_pkg_load(strname, 1, PM_PGP_VERIFY_OPTIONAL, &pkg);
+			alpm_pkg_load(config->handle, strname, 1, PM_PGP_VERIFY_OPTIONAL, &pkg);
 		} else {
 			pkg = alpm_db_get_pkg(db_local, strname);
 		}

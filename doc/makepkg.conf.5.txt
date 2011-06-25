@@ -70,7 +70,7 @@ Options
 	This is often used to set the number of jobs used, for example, `-j2`.
 	Other flags that make accepts can also be passed.
 
-**BUILDENV=(**fakeroot !distcc color !ccache !sign**)**::
+**BUILDENV=(**fakeroot !distcc color !ccache check !sign**)**::
 	This array contains options that affect the build environment, the defaults
 	are shown here. All options should always be left in the array; to enable
 	or disable an option simply remove or place an ``!'' at the front of the
@@ -110,11 +110,19 @@ Options
 	running in the DistCC cluster. In addition, you will want to modify your
 	`MAKEFLAGS`.
 
+**BUILDDIR=**"/path/to/folder"::
+	If this value is not set, packages will by default be built in
+	subdirectories of the directory that makepkg is called from.  This
+	option allows setting the build location to another folder.
+	Incorrect use of `$startdir` in a PKGBUILD may cause building with
+	this option to fail.
+
+
 **GPGKEY=**""::
 	Specify a key to use for gpg signing instead of the default key in the
 	keyring. Can be overridden with makepkg's `--key` option.
 
-**OPTIONS=(**strip !docs libtool emptydirs zipman**)**::
+**OPTIONS=(**strip docs libtool emptydirs zipman purge !upx**)**::
 	This array contains options that affect the default packaging. They are
 	equivalent to options that can be placed in the PKGBUILD; the defaults are
 	shown here. All options should always be left in the array; to enable or
@@ -145,6 +153,10 @@ Options
 	*purge*;;
 		Remove files specified by the `PURGE_TARGETS` variable from the
 		package.
+
+	*upx*;;
+		Compress binary executable files using UPX.  Additional options
+		can be passed to UPX by specifying the `UPXFLAGS` variable.
 
 **INTEGRITY_CHECK=(**check1 ...**)**::
 	File integrity checks to use. Multiple checks may be specified; this

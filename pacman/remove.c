@@ -38,8 +38,9 @@ static int remove_target(const char *target)
 	alpm_list_t *p;
 
 	if((info = alpm_db_get_pkg(db_local, target)) != NULL) {
-		if(alpm_remove_pkg(info) == -1) {
-			pm_fprintf(stderr, PM_LOG_ERROR, "'%s': %s\n", target, alpm_strerrorlast());
+		if(alpm_remove_pkg(config->handle, info) == -1) {
+			pm_fprintf(stderr, PM_LOG_ERROR, "'%s': %s\n", target,
+					alpm_strerror(alpm_errno(config->handle)));
 			return -1;
 		}
 		return 0;
@@ -51,10 +52,11 @@ static int remove_target(const char *target)
 		pm_fprintf(stderr, PM_LOG_ERROR, "'%s': target not found\n", target);
 		return -1;
 	}
-	for(p = alpm_grp_get_pkgs(grp); p; p = alpm_list_next(p)) {
+	for(p = grp->packages; p; p = alpm_list_next(p)) {
 		pmpkg_t *pkg = alpm_list_getdata(p);
-		if(alpm_remove_pkg(pkg) == -1) {
-			pm_fprintf(stderr, PM_LOG_ERROR, "'%s': %s\n", target, alpm_strerrorlast());
+		if(alpm_remove_pkg(config->handle, pkg) == -1) {
+			pm_fprintf(stderr, PM_LOG_ERROR, "'%s': %s\n", target,
+					alpm_strerror(alpm_errno(config->handle)));
 			return -1;
 		}
 	}
@@ -100,9 +102,10 @@ int pacman_remove(alpm_list_t *targets)
 
 	/* Step 2: prepare the transaction based on its type, targets and flags */
 	if(alpm_trans_prepare(config->handle, &data) == -1) {
+		enum _pmerrno_t err = alpm_errno(config->handle);
 		pm_fprintf(stderr, PM_LOG_ERROR, _("failed to prepare transaction (%s)\n"),
-		        alpm_strerrorlast());
-		switch(pm_errno) {
+		        alpm_strerror(err));
+		switch(err) {
 			case PM_ERR_PKG_INVALID_ARCH:
 				for(i = data; i; i = alpm_list_next(i)) {
 					char *pkg = alpm_list_getdata(i);
@@ -112,17 +115,15 @@ int pacman_remove(alpm_list_t *targets)
 			case PM_ERR_UNSATISFIED_DEPS:
 				for(i = data; i; i = alpm_list_next(i)) {
 					pmdepmissing_t *miss = alpm_list_getdata(i);
-					pmdepend_t *dep = alpm_miss_get_dep(miss);
-					char *depstring = alpm_dep_compute_string(dep);
-					printf(_(":: %s: requires %s\n"), alpm_miss_get_target(miss),
-							depstring);
+					char *depstring = alpm_dep_compute_string(miss->depend);
+					printf(_(":: %s: requires %s\n"), miss->target, depstring);
 					free(depstring);
 				}
-				FREELIST(data);
 				break;
 			default:
 				break;
 		}
+		FREELIST(data);
 		retval = 1;
 		goto cleanup;
 	}
@@ -162,11 +163,13 @@ int pacman_remove(alpm_list_t *targets)
 		goto cleanup;
 	}
 
-	if(alpm_trans_commit(config->handle, NULL) == -1) {
+	if(alpm_trans_commit(config->handle, &data) == -1) {
 		pm_fprintf(stderr, PM_LOG_ERROR, _("failed to commit transaction (%s)\n"),
-		        alpm_strerrorlast());
+		        alpm_strerror(alpm_errno(config->handle)));
 		retval = 1;
 	}
+
+	FREELIST(data);
 
 	/* Step 4: release transaction resources */
 cleanup:

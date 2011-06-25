@@ -30,15 +30,13 @@
 #include "util.h"
 #include "alpm.h"
 
-/* global handle variable */
-extern pmhandle_t *handle;
-
 /** \addtogroup alpm_log Logging Functions
  * @brief Functions to log using libalpm
  * @{
  */
 
 /** A printf-like function for logging.
+ * @param handle the context handle
  * @param fmt output format
  * @return 0 on success, -1 on error (pm_errno is set accordingly)
  */
@@ -47,8 +45,7 @@ int SYMEXPORT alpm_logaction(pmhandle_t *handle, const char *fmt, ...)
 	int ret;
 	va_list args;
 
-	/* Sanity checks */
-	ASSERT(handle != NULL, RET_ERR(PM_ERR_HANDLE_NULL, -1));
+	ASSERT(handle != NULL, return -1);
 
 	/* check if the logstream is open already, opening it if needed */
 	if(handle->logstream == NULL) {
@@ -56,13 +53,13 @@ int SYMEXPORT alpm_logaction(pmhandle_t *handle, const char *fmt, ...)
 		/* if we couldn't open it, we have an issue */
 		if(handle->logstream == NULL) {
 			if(errno == EACCES) {
-				pm_errno = PM_ERR_BADPERMS;
+				handle->pm_errno = PM_ERR_BADPERMS;
 			} else if(errno == ENOENT) {
-				pm_errno = PM_ERR_NOT_A_DIR;
+				handle->pm_errno = PM_ERR_NOT_A_DIR;
 			} else {
-				pm_errno = PM_ERR_SYSTEM;
+				handle->pm_errno = PM_ERR_SYSTEM;
 			}
-		return -1;
+			return -1;
 		}
 	}
 
@@ -86,17 +83,16 @@ int SYMEXPORT alpm_logaction(pmhandle_t *handle, const char *fmt, ...)
 
 /** @} */
 
-void _alpm_log(pmloglevel_t flag, const char *fmt, ...)
+void _alpm_log(pmhandle_t *handle, pmloglevel_t flag, const char *fmt, ...)
 {
 	va_list args;
-	alpm_cb_log logcb = alpm_option_get_logcb(handle);
 
-	if(logcb == NULL) {
+	if(handle == NULL || handle->logcb == NULL) {
 		return;
 	}
 
 	va_start(args, fmt);
-	logcb(flag, fmt, args);
+	handle->logcb(flag, fmt, args);
 	va_end(args);
 }
 

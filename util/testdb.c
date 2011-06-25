@@ -98,12 +98,11 @@ static int checkdeps(alpm_list_t *pkglist)
 	alpm_list_t *data, *i;
 	int ret = 0;
 	/* check dependencies */
-	data = alpm_checkdeps(pkglist, 0, NULL, pkglist);
+	data = alpm_checkdeps(handle, pkglist, NULL, pkglist, 0);
 	for(i = data; i; i = alpm_list_next(i)) {
 		pmdepmissing_t *miss = alpm_list_getdata(i);
-		pmdepend_t *dep = alpm_miss_get_dep(miss);
-		char *depstring = alpm_dep_compute_string(dep);
-		printf("missing dependency for %s : %s\n", alpm_miss_get_target(miss),
+		char *depstring = alpm_dep_compute_string(miss->depend);
+		printf("missing dependency for %s : %s\n", miss->target,
 				depstring);
 		free(depstring);
 		ret++;
@@ -117,11 +116,11 @@ static int checkconflicts(alpm_list_t *pkglist)
 	alpm_list_t *data, *i;
 	int ret = 0;
 	/* check conflicts */
-	data = alpm_checkconflicts(pkglist);
+	data = alpm_checkconflicts(handle, pkglist);
 	for(i = data; i; i = i->next) {
 		pmconflict_t *conflict = alpm_list_getdata(i);
-		printf("%s conflicts with %s\n", alpm_conflict_get_package1(conflict),
-				alpm_conflict_get_package2(conflict));
+		printf("%s conflicts with %s\n",
+				conflict->package1, conflict->package2);
 		ret++;
 	}
 	FREELIST(data);
@@ -152,10 +151,10 @@ static int check_syncdbs(alpm_list_t *dbnames) {
 
 	for(i = dbnames; i; i = alpm_list_next(i)) {
 		char *dbname = alpm_list_getdata(i);
-		db = alpm_db_register_sync(handle, dbname);
+		db = alpm_db_register_sync(handle, dbname, PM_PGP_VERIFY_OPTIONAL);
 		if(db == NULL) {
 			fprintf(stderr, "error: could not register sync database (%s)\n",
-					alpm_strerrorlast());
+					alpm_strerror(alpm_errno(handle)));
 			ret = 1;
 			goto cleanup;
 		}

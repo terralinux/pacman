@@ -19,7 +19,6 @@
 import os
 import re
 import hashlib
-import stat
 
 
 # ALPM
@@ -48,22 +47,7 @@ def vprint(msg):
 # Methods to generate files
 #
 
-def getfilename(name):
-    """
-    """
-    filename = name
-    extra = ""
-    if filename[-1] == "*":
-        filename = filename.rstrip("*")
-    if filename.find(" -> ") != -1:
-        filename, extra = filename.split(" -> ")
-    elif filename.find("|") != -1:
-        filename, extra = filename.split("|")
-    return filename
-
 def mkfile(name, data = ""):
-    """
-    """
     isdir = 0
     islink = 0
     setperms = 0
@@ -107,19 +91,7 @@ def mkfile(name, data = ""):
         if setperms:
             os.chmod(filename, int(perms, 8))
 
-def mkinstallfile(filename, install):
-    """
-    """
-    data = []
-    for key, value in install.iteritems():
-        if value:
-            data.append("%s() {\n%s\n}" % (key, value))
-            
-    mkfile(filename, "\n".join(data))
-
 def mkcfgfile(filename, root, option, db):
-    """
-    """
     # Options
     data = ["[options]"]
     for key, value in option.iteritems():
@@ -147,8 +119,6 @@ def mkcfgfile(filename, root, option, db):
 #
 
 def getmd5sum(filename):
-    """
-    """
     if not os.path.isfile(filename):
         return ""
     fd = open(filename, "rb")
@@ -162,24 +132,10 @@ def getmd5sum(filename):
     return checksum.hexdigest()
 
 def mkmd5sum(data):
-    """
-    """
     checksum = hashlib.md5()
     checksum.update("%s\n" % data)
     return checksum.hexdigest()
 
-
-#
-# Mtime helpers
-#
-
-def getmtime(filename):
-    """
-    """
-    if not os.path.exists(filename):
-        return None, None, None
-    st = os.lstat(filename)
-    return st[stat.ST_ATIME], st[stat.ST_MTIME], st[stat.ST_CTIME]
 
 #
 # Miscellaneous

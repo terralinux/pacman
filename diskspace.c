@@ -59,7 +59,7 @@ static int mount_point_cmp(const void *p1, const void *p2)
 	return -strcmp(mp1->mount_dir, mp2->mount_dir);
 }
 
-static alpm_list_t *mount_point_list(void)
+static alpm_list_t *mount_point_list(pmhandle_t *handle)
 {
 	alpm_list_t *mount_points = NULL, *ptr;
 	alpm_mountpoint_t *mp;
@@ -77,17 +77,17 @@ static alpm_list_t *mount_point_list(void)
 
 	while((mnt = getmntent(fp))) {
 		if(!mnt) {
-			_alpm_log(PM_LOG_WARNING, _("could not get filesystem information\n"));
+			_alpm_log(handle, PM_LOG_WARNING, _("could not get filesystem information\n"));
 			continue;
 		}
 		if(statvfs(mnt->mnt_dir, &fsp) != 0) {
-			_alpm_log(PM_LOG_WARNING,
+			_alpm_log(handle, PM_LOG_WARNING,
 					_("could not get filesystem information for %s: %s\n"),
 					mnt->mnt_dir, strerror(errno));
 			continue;
 		}
 
-		CALLOC(mp, 1, sizeof(alpm_mountpoint_t), RET_ERR(PM_ERR_MEMORY, NULL));
+		CALLOC(mp, 1, sizeof(alpm_mountpoint_t), RET_ERR(handle, PM_ERR_MEMORY, NULL));
 		mp->mount_dir = strdup(mnt->mnt_dir);
 		mp->mount_dir_len = strlen(mp->mount_dir);
 		memcpy(&(mp->fsp), &fsp, sizeof(struct statvfs));
@@ -126,7 +126,7 @@ static alpm_list_t *mount_point_list(void)
 			mount_point_cmp);
 	for(ptr = mount_points; ptr != NULL; ptr = ptr->next) {
 		mp = ptr->data;
-		_alpm_log(PM_LOG_DEBUG, "mountpoint: %s\n", mp->mount_dir);
+		_alpm_log(handle, PM_LOG_DEBUG, "mountpoint: %s\n", mp->mount_dir);
 	}
 	return mount_points;
 }
@@ -171,7 +171,7 @@ static int calculate_removed_size(pmhandle_t *handle,
 
 		mp = match_mount_point(mount_points, path);
 		if(mp == NULL) {
-			_alpm_log(PM_LOG_WARNING,
+			_alpm_log(handle, PM_LOG_WARNING,
 					_("could not determine mount point for file %s\n"), filename);
 			continue;
 		}
@@ -193,7 +193,7 @@ static int calculate_installed_size(pmhandle_t *handle,
 	struct archive_entry *entry;
 
 	if((archive = archive_read_new()) == NULL) {
-		pm_errno = PM_ERR_LIBARCHIVE;
+		handle->pm_errno = PM_ERR_LIBARCHIVE;
 		ret = -1;
 		goto cleanup;
 	}
@@ -203,7 +203,7 @@ static int calculate_installed_size(pmhandle_t *handle,
 
 	if(archive_read_open_filename(archive, pkg->origin_data.file,
 				ARCHIVE_DEFAULT_BYTES_PER_BLOCK) != ARCHIVE_OK) {
-		pm_errno = PM_ERR_PKG_OPEN;
+		handle->pm_errno = PM_ERR_PKG_OPEN;
 		ret = -1;
 		goto cleanup;
 	}
@@ -233,7 +233,7 @@ static int calculate_installed_size(pmhandle_t *handle,
 
 		mp = match_mount_point(mount_points, path);
 		if(mp == NULL) {
-			_alpm_log(PM_LOG_WARNING,
+			_alpm_log(handle, PM_LOG_WARNING,
 					_("could not determine mount point for file %s\n"), filename);
 			continue;
 		}
@@ -244,9 +244,9 @@ static int calculate_installed_size(pmhandle_t *handle,
 		mp->used |= USED_INSTALL;
 
 		if(archive_read_data_skip(archive)) {
-			_alpm_log(PM_LOG_ERROR, _("error while reading package %s: %s\n"),
+			_alpm_log(handle, PM_LOG_ERROR, _("error while reading package %s: %s\n"),
 					pkg->name, archive_error_string(archive));
-			pm_errno = PM_ERR_LIBARCHIVE;
+			handle->pm_errno = PM_ERR_LIBARCHIVE;
 			break;
 		}
 	}
@@ -267,14 +267,14 @@ int _alpm_check_diskspace(pmhandle_t *handle)
 	pmtrans_t *trans = handle->trans;
 
 	numtargs = alpm_list_count(trans->add);
-	mount_points = mount_point_list();
+	mount_points = mount_point_list(handle);
 	if(mount_points == NULL) {
-		_alpm_log(PM_LOG_ERROR, _("could not determine filesystem mount points\n"));
+		_alpm_log(handle, PM_LOG_ERROR, _("could not determine filesystem mount points\n"));
 		return -1;
 	}
 	root_mp = match_mount_point(mount_points, handle->root);
 	if(root_mp == NULL) {
-		_alpm_log(PM_LOG_ERROR, _("could not determine root mount point %s\n"),
+		_alpm_log(handle, PM_LOG_ERROR, _("could not determine root mount point %s\n"),
 				handle->root);
 		return -1;
 	}
@@ -321,7 +321,7 @@ int _alpm_check_diskspace(pmhandle_t *handle)
 	for(i = mount_points; i; i = alpm_list_next(i)) {
 		alpm_mountpoint_t *data = i->data;
 		if(data->used && data->read_only) {
-			_alpm_log(PM_LOG_ERROR, _("Partition %s is mounted read only\n"),
+			_alpm_log(handle, PM_LOG_ERROR, _("Partition %s is mounted read only\n"),
 					data->mount_dir);
 			abort = 1;
 		} else if(data->used & USED_INSTALL) {
@@ -330,12 +330,12 @@ int _alpm_check_diskspace(pmhandle_t *handle)
 			long twentymb = (20 * 1024 * 1024 / (long)data->fsp.f_bsize) + 1;
 			long cushion = fivepc < twentymb ? fivepc : twentymb;
 
-			_alpm_log(PM_LOG_DEBUG, "partition %s, needed %ld, cushion %ld, free %ld\n",
+			_alpm_log(handle, PM_LOG_DEBUG, "partition %s, needed %ld, cushion %ld, free %ld\n",
 					data->mount_dir, data->max_blocks_needed, cushion,
 					(unsigned long)data->fsp.f_bfree);
 			if(data->max_blocks_needed + cushion >= 0 &&
 			   (unsigned long)(data->max_blocks_needed + cushion) > data->fsp.f_bfree) {
-				_alpm_log(PM_LOG_ERROR, _("Partition %s too full: %ld blocks needed, %ld blocks free\n"),
+				_alpm_log(handle, PM_LOG_ERROR, _("Partition %s too full: %ld blocks needed, %ld blocks free\n"),
 						data->mount_dir, data->max_blocks_needed + cushion,
 						(unsigned long)data->fsp.f_bfree);
 				abort = 1;
@@ -350,7 +350,7 @@ int _alpm_check_diskspace(pmhandle_t *handle)
 	FREELIST(mount_points);
 
 	if(abort) {
-		RET_ERR(PM_ERR_DISK_SPACE, -1);
+		RET_ERR(handle, PM_ERR_DISK_SPACE, -1);
 	}
 
 	return 0;

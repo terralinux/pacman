@@ -55,7 +55,7 @@ struct __pmhandle_t {
 	char *dbpath;            /* Base path to pacman's DBs */
 	char *logfile;           /* Name of the log file */
 	char *lockfile;          /* Name of the lock file */
-	char *signaturedir;        /* Directory where GnuPG files are stored */
+	char *gpgdir;            /* Directory where GnuPG files are stored */
 	alpm_list_t *cachedirs;  /* Paths to pacman cache directories */
 
 	/* package lists */
@@ -70,10 +70,16 @@ struct __pmhandle_t {
 	int usedelta;            /* Download deltas if possible */
 	int checkspace;          /* Check disk space before installing */
 	pgp_verify_t sigverify;  /* Default signature verification level */
+
+	/* error code */
+	enum _pmerrno_t pm_errno;
 };
 
 pmhandle_t *_alpm_handle_new(void);
 void _alpm_handle_free(pmhandle_t *handle);
+
+int _alpm_handle_lock(pmhandle_t *handle);
+int _alpm_handle_unlock(pmhandle_t *handle);
 
 enum _pmerrno_t _alpm_set_directory_option(const char *value,
 		char **storage, int must_exist);

@@ -45,7 +45,7 @@
 /** Free a package. */
 int SYMEXPORT alpm_pkg_free(pmpkg_t *pkg)
 {
-	ASSERT(pkg != NULL, RET_ERR(PM_ERR_WRONG_ARGS, -1));
+	ASSERT(pkg != NULL, return -1);
 
 	/* Only free packages loaded in user space */
 	if(pkg->origin == PKG_FROM_FILE) {
@@ -61,9 +61,11 @@ int SYMEXPORT alpm_pkg_checkmd5sum(pmpkg_t *pkg)
 	char *fpath;
 	int retval;
 
-	ASSERT(pkg != NULL, RET_ERR(PM_ERR_WRONG_ARGS, -1));
+	ASSERT(pkg != NULL, return -1);
+	pkg->handle->pm_errno = 0;
 	/* We only inspect packages from sync repositories */
-	ASSERT(pkg->origin == PKG_FROM_SYNCDB, RET_ERR(PM_ERR_PKG_INVALID, -1));
+	ASSERT(pkg->origin == PKG_FROM_SYNCDB,
+			RET_ERR(pkg->handle, PM_ERR_WRONG_ARGS, -1));
 
 	fpath = _alpm_filecache_find(pkg->handle, alpm_pkg_get_filename(pkg));
 
@@ -72,7 +74,7 @@ int SYMEXPORT alpm_pkg_checkmd5sum(pmpkg_t *pkg)
 	if(retval == 0) {
 		return 0;
 	} else if(retval == 1) {
-		pm_errno = PM_ERR_PKG_INVALID;
+		pkg->handle->pm_errno = PM_ERR_PKG_INVALID;
 		retval = -1;
 	}
 
@@ -162,116 +164,162 @@ struct pkg_operations default_pkg_ops = {
  * package, which depend on where the package was loaded from. */
 const char SYMEXPORT *alpm_pkg_get_filename(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_filename(pkg);
 }
 
 const char SYMEXPORT *alpm_pkg_get_name(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->name;
 }
 
 const char SYMEXPORT *alpm_pkg_get_version(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->version;
 }
 
 const char SYMEXPORT *alpm_pkg_get_desc(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_desc(pkg);
 }
 
 const char SYMEXPORT *alpm_pkg_get_url(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_url(pkg);
 }
 
 time_t SYMEXPORT alpm_pkg_get_builddate(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return -1);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_builddate(pkg);
 }
 
 time_t SYMEXPORT alpm_pkg_get_installdate(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return -1);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_installdate(pkg);
 }
 
 const char SYMEXPORT *alpm_pkg_get_packager(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_packager(pkg);
 }
 
 const char SYMEXPORT *alpm_pkg_get_md5sum(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_md5sum(pkg);
 }
 
 const char SYMEXPORT *alpm_pkg_get_arch(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_arch(pkg);
 }
 
 off_t SYMEXPORT alpm_pkg_get_size(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return -1);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_size(pkg);
 }
 
 off_t SYMEXPORT alpm_pkg_get_isize(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return -1);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_isize(pkg);
 }
 
 pmpkgreason_t SYMEXPORT alpm_pkg_get_reason(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return -1);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_reason(pkg);
 }
 
 alpm_list_t SYMEXPORT *alpm_pkg_get_licenses(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_licenses(pkg);
 }
 
 alpm_list_t SYMEXPORT *alpm_pkg_get_groups(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_groups(pkg);
 }
 
 alpm_list_t SYMEXPORT *alpm_pkg_get_depends(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_depends(pkg);
 }
 
 alpm_list_t SYMEXPORT *alpm_pkg_get_optdepends(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_optdepends(pkg);
 }
 
 alpm_list_t SYMEXPORT *alpm_pkg_get_conflicts(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_conflicts(pkg);
 }
 
 alpm_list_t SYMEXPORT *alpm_pkg_get_provides(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_provides(pkg);
 }
 
 alpm_list_t SYMEXPORT *alpm_pkg_get_replaces(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_replaces(pkg);
 }
 
 alpm_list_t SYMEXPORT *alpm_pkg_get_deltas(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_deltas(pkg);
 }
 
 alpm_list_t SYMEXPORT *alpm_pkg_get_files(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_files(pkg);
 }
 
 alpm_list_t SYMEXPORT *alpm_pkg_get_backup(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->get_backup(pkg);
 }
 
@@ -280,6 +328,7 @@ pmdb_t SYMEXPORT *alpm_pkg_get_db(pmpkg_t *pkg)
 	/* Sanity checks */
 	ASSERT(pkg != NULL, return NULL);
 	ASSERT(pkg->origin != PKG_FROM_FILE, return NULL);
+	pkg->handle->pm_errno = 0;
 
 	return pkg->origin_data.db;
 }
@@ -287,6 +336,8 @@ pmdb_t SYMEXPORT *alpm_pkg_get_db(pmpkg_t *pkg)
 /** Open a package changelog for reading. */
 void SYMEXPORT *alpm_pkg_changelog_open(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->changelog_open(pkg);
 }
 
@@ -294,6 +345,8 @@ void SYMEXPORT *alpm_pkg_changelog_open(pmpkg_t *pkg)
 size_t SYMEXPORT alpm_pkg_changelog_read(void *ptr, size_t size,
 		const pmpkg_t *pkg, const void *fp)
 {
+	ASSERT(pkg != NULL, return 0);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->changelog_read(ptr, size, pkg, fp);
 }
 
@@ -307,17 +360,23 @@ int SYMEXPORT alpm_pkg_changelog_feof(const pmpkg_t *pkg, void *fp)
 /** Close a package changelog for reading. */
 int SYMEXPORT alpm_pkg_changelog_close(const pmpkg_t *pkg, void *fp)
 {
+	ASSERT(pkg != NULL, return -1);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->changelog_close(pkg, fp);
 }
 
 int SYMEXPORT alpm_pkg_has_scriptlet(pmpkg_t *pkg)
 {
+	ASSERT(pkg != NULL, return -1);
+	pkg->handle->pm_errno = 0;
 	return pkg->ops->has_scriptlet(pkg);
 }
 
 static void find_requiredby(pmpkg_t *pkg, pmdb_t *db, alpm_list_t **reqs)
 {
 	const alpm_list_t *i;
+	pkg->handle->pm_errno = 0;
+
 	for(i = _alpm_db_get_pkgcache(db); i; i = i->next) {
 		pmpkg_t *cachepkg = i->data;
 		alpm_list_t *i;
@@ -339,10 +398,12 @@ alpm_list_t SYMEXPORT *alpm_pkg_compute_requiredby(pmpkg_t *pkg)
 	alpm_list_t *reqs = NULL;
 	pmdb_t *db;
 
+	ASSERT(pkg != NULL, return NULL);
+	pkg->handle->pm_errno = 0;
+
 	if(pkg->origin == PKG_FROM_FILE) {
 		/* The sane option; search locally for things that require this. */
-		db = alpm_option_get_localdb(pkg->handle);
-		find_requiredby(pkg, db, &reqs);
+		find_requiredby(pkg, pkg->handle->db_local, &reqs);
 	} else {
 		/* We have a DB package. if it is a local package, then we should
 		 * only search the local DB; else search all known sync databases. */
@@ -366,7 +427,7 @@ pmpkg_t *_alpm_pkg_new(void)
 {
 	pmpkg_t* pkg;
 
-	CALLOC(pkg, 1, sizeof(pmpkg_t), RET_ERR(PM_ERR_MEMORY, NULL));
+	CALLOC(pkg, 1, sizeof(pmpkg_t), return NULL);
 
 	return pkg;
 }
@@ -376,19 +437,19 @@ pmpkg_t *_alpm_pkg_dup(pmpkg_t *pkg)
 	pmpkg_t *newpkg;
 	alpm_list_t *i;
 
-	CALLOC(newpkg, 1, sizeof(pmpkg_t), RET_ERR(PM_ERR_MEMORY, NULL));
+	CALLOC(newpkg, 1, sizeof(pmpkg_t), goto cleanup);
 
 	newpkg->name_hash = pkg->name_hash;
-	STRDUP(newpkg->filename, pkg->filename, RET_ERR(PM_ERR_MEMORY, newpkg));
-	STRDUP(newpkg->name, pkg->name, RET_ERR(PM_ERR_MEMORY, newpkg));
-	STRDUP(newpkg->version, pkg->version, RET_ERR(PM_ERR_MEMORY, newpkg));
-	STRDUP(newpkg->desc, pkg->desc, RET_ERR(PM_ERR_MEMORY, newpkg));
-	STRDUP(newpkg->url, pkg->url, RET_ERR(PM_ERR_MEMORY, newpkg));
+	STRDUP(newpkg->filename, pkg->filename, goto cleanup);
+	STRDUP(newpkg->name, pkg->name, goto cleanup);
+	STRDUP(newpkg->version, pkg->version, goto cleanup);
+	STRDUP(newpkg->desc, pkg->desc, goto cleanup);
+	STRDUP(newpkg->url, pkg->url, goto cleanup);
 	newpkg->builddate = pkg->builddate;
 	newpkg->installdate = pkg->installdate;
-	STRDUP(newpkg->packager, pkg->packager, RET_ERR(PM_ERR_MEMORY, newpkg));
-	STRDUP(newpkg->md5sum, pkg->md5sum, RET_ERR(PM_ERR_MEMORY, newpkg));
-	STRDUP(newpkg->arch, pkg->arch, RET_ERR(PM_ERR_MEMORY, newpkg));
+	STRDUP(newpkg->packager, pkg->packager, goto cleanup);
+	STRDUP(newpkg->md5sum, pkg->md5sum, goto cleanup);
+	STRDUP(newpkg->arch, pkg->arch, goto cleanup);
 	newpkg->size = pkg->size;
 	newpkg->isize = pkg->isize;
 	newpkg->scriptlet = pkg->scriptlet;
@@ -398,14 +459,18 @@ pmpkg_t *_alpm_pkg_dup(pmpkg_t *pkg)
 	newpkg->replaces   = alpm_list_strdup(pkg->replaces);
 	newpkg->groups     = alpm_list_strdup(pkg->groups);
 	newpkg->files      = alpm_list_strdup(pkg->files);
-	newpkg->backup     = alpm_list_strdup(pkg->backup);
+	for(i = pkg->backup; i; i = alpm_list_next(i)) {
+		newpkg->backup = alpm_list_add(newpkg->backup, _alpm_backup_dup(i->data));
+	}
 	for(i = pkg->depends; i; i = alpm_list_next(i)) {
 		newpkg->depends = alpm_list_add(newpkg->depends, _alpm_dep_dup(i->data));
 	}
 	newpkg->optdepends = alpm_list_strdup(pkg->optdepends);
 	newpkg->conflicts  = alpm_list_strdup(pkg->conflicts);
 	newpkg->provides   = alpm_list_strdup(pkg->provides);
-	newpkg->deltas     = alpm_list_copy_data(pkg->deltas, sizeof(pmdelta_t));
+	for(i = pkg->deltas; i; i = alpm_list_next(i)) {
+		newpkg->deltas = alpm_list_add(newpkg->deltas, _alpm_delta_dup(i->data));
+	}
 
 	/* internal */
 	newpkg->infolevel = pkg->infolevel;
@@ -419,6 +484,10 @@ pmpkg_t *_alpm_pkg_dup(pmpkg_t *pkg)
 	newpkg->handle = pkg->handle;
 
 	return newpkg;
+
+cleanup:
+	_alpm_pkg_free(newpkg);
+	return NULL;
 }
 
 void _alpm_pkg_free(pmpkg_t *pkg)
@@ -440,7 +509,8 @@ void _alpm_pkg_free(pmpkg_t *pkg)
 	FREELIST(pkg->replaces);
 	FREELIST(pkg->groups);
 	FREELIST(pkg->files);
-	FREELIST(pkg->backup);
+	alpm_list_free_inner(pkg->backup, (alpm_list_fn_free)_alpm_backup_free);
+	alpm_list_free(pkg->backup);
 	alpm_list_free_inner(pkg->depends, (alpm_list_fn_free)_alpm_dep_free);
 	alpm_list_free(pkg->depends);
 	FREELIST(pkg->optdepends);
@@ -530,21 +600,22 @@ pmpkg_t *_alpm_pkg_find(alpm_list_t *haystack, const char *needle)
  * Checks if the package is ignored via IgnorePkg, or if the package is
  * in a group ignored via IgnoreGrp.
  *
+ * @param handle the context handle
  * @param pkg the package to test
  *
  * @return 1 if the package should be ignored, 0 otherwise
  */
-int _alpm_pkg_should_ignore(pmpkg_t *pkg)
+int _alpm_pkg_should_ignore(pmhandle_t *handle, pmpkg_t *pkg)
 {
 	alpm_list_t *groups = NULL;
 
 	/* first see if the package is ignored */
-	if(alpm_list_find_str(pkg->handle->ignorepkg, alpm_pkg_get_name(pkg))) {
+	if(alpm_list_find_str(handle->ignorepkg, alpm_pkg_get_name(pkg))) {
 		return 1;
 	}
 
 	/* next see if the package is in a group that is ignored */
-	for(groups = pkg->handle->ignoregrp; groups; groups = alpm_list_next(groups)) {
+	for(groups = handle->ignoregrp; groups; groups = alpm_list_next(groups)) {
 		char *grp = (char *)alpm_list_getdata(groups);
 		if(alpm_list_find_str(alpm_pkg_get_groups(pkg), grp)) {
 			return 1;

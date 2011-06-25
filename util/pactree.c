@@ -75,7 +75,6 @@ static struct color_choices no_color = {
 
 /* globals */
 pmhandle_t *handle = NULL;
-pmdb_t *db_local;
 alpm_list_t *walked = NULL;
 alpm_list_t *provisions = NULL;
 
@@ -87,19 +86,6 @@ int max_depth = -1;
 int reverse = 0;
 int unique = 0;
 const char *dbpath = DBPATH;
-
-static int alpm_local_init(void)
-{
-	enum _pmerrno_t err;
-
-	handle = alpm_initialize(ROOTDIR, dbpath, &err);
-	if(!handle) {
-		return -1;
-	}
-
-	db_local = alpm_option_get_localdb(handle);
-	return 0;
-}
 
 static int parse_options(int argc, char *argv[])
 {
@@ -254,15 +240,27 @@ static void print_end(void)
 	}
 }
 
+static pmpkg_t *get_pkg_from_dbs(alpm_list_t *dbs, const char *needle) {
+	alpm_list_t *i;
+	pmpkg_t *ret;
+
+	for(i = dbs; i; i = alpm_list_next(i)) {
+		ret = alpm_db_get_pkg(alpm_list_getdata(i), needle);
+		if(ret) {
+			return ret;
+		}
+	}
+	return NULL;
+}
 
 /**
  * walk dependencies in reverse, showing packages which require the target
  */
-static void walk_reverse_deps(pmpkg_t *pkg, int depth)
+static void walk_reverse_deps(alpm_list_t *dblist, pmpkg_t *pkg, int depth)
 {
 	alpm_list_t *required_by, *i;
 
-	if((max_depth >= 0) && (depth == max_depth + 1)) {
+	if(!pkg || ((max_depth >= 0) && (depth == max_depth + 1))) {
 		return;
 	}
 
@@ -280,7 +278,7 @@ static void walk_reverse_deps(pmpkg_t *pkg, int depth)
 			}
 		} else {
 			print(alpm_pkg_get_name(pkg), pkgname, NULL, depth);
-			walk_reverse_deps(alpm_db_get_pkg(db_local, pkgname), depth + 1);
+			walk_reverse_deps(dblist, get_pkg_from_dbs(dblist, pkgname), depth + 1);
 		}
 	}
 
@@ -290,7 +288,7 @@ static void walk_reverse_deps(pmpkg_t *pkg, int depth)
 /**
  * walk dependencies, showing dependencies of the target
  */
-static void walk_deps(pmpkg_t *pkg, int depth)
+static void walk_deps(alpm_list_t *dblist, pmpkg_t *pkg, int depth)
 {
 	alpm_list_t *i;
 
@@ -302,8 +300,7 @@ static void walk_deps(pmpkg_t *pkg, int depth)
 
 	for(i = alpm_pkg_get_depends(pkg); i; i = alpm_list_next(i)) {
 		pmdepend_t *depend = alpm_list_getdata(i);
-		pmpkg_t *provider = alpm_find_satisfier(alpm_db_get_pkgcache(db_local),
-				alpm_dep_get_name(depend));
+		pmpkg_t *provider = alpm_find_dbs_satisfier(handle, dblist, depend->name);
 
 		if(provider) {
 			const char *provname = alpm_pkg_get_name(provider);
@@ -312,41 +309,47 @@ static void walk_deps(pmpkg_t *pkg, int depth)
 				/* if we've already seen this package, don't print in "unique" output
 				 * and don't recurse */
 				if(!unique) {
-					print(alpm_pkg_get_name(pkg), provname, alpm_dep_get_name(depend), depth);
+					print(alpm_pkg_get_name(pkg), provname, depend->name, depth);
 				}
 			} else {
-				print(alpm_pkg_get_name(pkg), provname, alpm_dep_get_name(depend), depth);
-				walk_deps(provider, depth + 1);
+				print(alpm_pkg_get_name(pkg), provname, depend->name, depth);
+				walk_deps(dblist, provider, depth + 1);
 			}
 		} else {
 			/* unresolvable package */
-			print(alpm_pkg_get_name(pkg), NULL, alpm_dep_get_name(depend), depth);
+			print(alpm_pkg_get_name(pkg), NULL, depend->name, depth);
 		}
 	}
 }
 
 int main(int argc, char *argv[])
 {
-	int ret;
+	int ret = 0;
+	enum _pmerrno_t err;
 	const char *target_name;
 	pmpkg_t *pkg;
+	alpm_list_t *dblist = NULL;
 
-	ret = parse_options(argc, argv);
-	if(ret != 0) {
+	if(parse_options(argc, argv) != 0) {
 		usage();
+		ret = 1;
 		goto finish;
 	}
 
-	ret = alpm_local_init();
-	if(ret != 0) {
-		fprintf(stderr, "error: cannot initialize alpm: %s\n", alpm_strerrorlast());
+	handle = alpm_initialize(ROOTDIR, dbpath, &err);
+	if(!handle) {
+		fprintf(stderr, "error: cannot initialize alpm: %s\n",
+				alpm_strerror(err));
+		ret = 1;
 		goto finish;
 	}
+
+	dblist = alpm_list_add(dblist, alpm_option_get_localdb(handle));
 
 	/* we only care about the first non option arg for walking */
 	target_name = argv[optind];
 
-	pkg = alpm_find_satisfier(alpm_db_get_pkgcache(db_local), target_name);
+	pkg = alpm_find_dbs_satisfier(handle, dblist, target_name);
 	if(!pkg) {
 		fprintf(stderr, "error: package '%s' not found\n", target_name);
 		ret = 1;
@@ -356,12 +359,14 @@ int main(int argc, char *argv[])
 	print_start(alpm_pkg_get_name(pkg), target_name);
 
 	if(reverse) {
-		walk_reverse_deps(pkg, 1);
+		walk_reverse_deps(dblist, pkg, 1);
 	} else {
-		walk_deps(pkg, 1);
+		walk_deps(dblist, pkg, 1);
 	}
 
 	print_end();
+
+	alpm_list_free(dblist);
 
 finish:
 	cleanup();

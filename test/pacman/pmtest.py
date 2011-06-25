@@ -17,7 +17,6 @@
 
 
 import os
-import os.path
 import shutil
 import stat
 import time
@@ -44,15 +43,11 @@ class pmtest(object):
                "root = %s" % (self.name, self.testname, self.root)
 
     def addpkg2db(self, treename, pkg):
-        """
-        """
         if not treename in self.db:
             self.db[treename] = pmdb.pmdb(treename, self.root)
         self.db[treename].pkgs.append(pkg)
 
     def addpkg(self, pkg):
-        """
-        """
         self.localpkgs.append(pkg)
 
     def findpkg(self, name, version, allow_local=False):
@@ -60,7 +55,7 @@ class pmtest(object):
         either sync databases or the local package collection. The local database
         is allowed to match if allow_local is True."""
         for db in self.db.itervalues():
-            if db.treename == "local" and not allow_local:
+            if db.is_local and not allow_local:
                 continue
             pkg = db.getpkg(name)
             if pkg and pkg.version == version:
@@ -72,15 +67,10 @@ class pmtest(object):
         return None
 
     def addrule(self, rulename):
-        """
-        """
         rule = pmrule.pmrule(rulename)
         self.rules.append(rule)
 
     def load(self):
-        """
-        """
-
         # Reset test parameters
         self.result = {
             "success": 0,
@@ -111,9 +101,6 @@ class pmtest(object):
             raise IOError("file %s does not exist!" % self.name)
 
     def generate(self):
-        """
-        """
-
         print "==> Generating test environment"
 
         # Cleanup leftover files from a previous test session
@@ -123,7 +110,7 @@ class pmtest(object):
 
         # Create directory structure
         vprint("    Creating directory structure:")
-        dbdir = os.path.join(self.root, util.PM_DBPATH)
+        dbdir = os.path.join(self.root, util.PM_SYNCDBPATH)
         cachedir = os.path.join(self.root, util.PM_CACHEDIR)
         syncdir = os.path.join(self.root, util.SYNCREPO)
         tmpdir = os.path.join(self.root, util.TMPDIR)
@@ -159,25 +146,11 @@ class pmtest(object):
                 pkg.md5sum = util.getmd5sum(pkg.path)
                 pkg.csize = os.stat(pkg.path)[stat.ST_SIZE]
 
-        # Populating databases
-        vprint("    Populating databases")
-        for key, value in self.db.iteritems():
-            for pkg in value.pkgs:
-                vprint("\t%s/%s" % (key, pkg.fullname()))
-                if key == "local":
-                    pkg.installdate = time.ctime()
-                value.db_write(pkg)
-
         # Creating sync database archives
-        vprint("    Creating sync database archives")
+        vprint("    Creating databases")
         for key, value in self.db.iteritems():
-            if key == "local":
-                continue
             vprint("\t" + value.treename)
-            value.gensync()
-            serverpath = os.path.join(syncdir, value.treename)
-            util.mkdir(serverpath)
-            shutil.copy(value.dbfile, serverpath)
+            value.generate()
 
         # Filesystem
         vprint("    Populating file system")
@@ -201,14 +174,11 @@ class pmtest(object):
         for roots, dirs, files in os.walk(self.root):
             for i in files:
                 filename = os.path.join(roots, i)
-                f = pmfile.pmfile(self.root, filename.replace(self.root + "/", ""))
+                f = pmfile.PacmanFile(self.root, filename.replace(self.root + "/", ""))
                 self.files.append(f)
                 vprint("\t%s" % f.name)
 
     def run(self, pacman):
-        """
-        """
-
         if os.path.isfile(util.PM_LOCK):
             print "\tERROR: another pacman session is on-going -- skipping"
             return
@@ -274,9 +244,6 @@ class pmtest(object):
             print "\tERROR: pacman dumped a core file"
 
     def check(self):
-        """
-        """
-
         print "==> Checking rules"
 
         for i in self.rules:
