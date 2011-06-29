@@ -518,7 +518,8 @@ download_sources() {
 		local file=$(get_filepath "$netfile" || true)
 		if [[ -n "$file" ]]; then
 			msg2 "$(gettext "Found %s")" "${file##*/}"
-			ln -sf "$file" "$srcdir/"
+			rm -f "$srcdir/$file"
+			ln -s "$file" "$srcdir/"
 			continue
 		fi
 
@@ -878,8 +879,8 @@ tidy_install() {
 				# update symlinks to this manpage
 				find ${MAN_DIRS[@]} -lname "$file" 2>/dev/null |
 				while read link ; do
-					rm -f "$link"
-					ln -sf "${file}.gz" "${link}.gz"
+					rm -f "$link" "${link}.gz"
+					ln -s "${file}.gz" "${link}.gz"
 				done
 
 				# check file still exists (potentially already compressed due to hardlink)
@@ -1187,9 +1188,13 @@ create_package() {
 	create_signature "$pkg_file"
 
 	if (( ! ret )) && [[ ! "$PKGDEST" -ef "${startdir}" ]]; then
-		ln -sf "${pkg_file}" "${pkg_file/$PKGDEST/$startdir}"
+		rm -f "${pkg_file/$PKGDEST/$startdir}"
+		ln -s "${pkg_file}" "${pkg_file/$PKGDEST/$startdir}"
 		ret=$?
-		[[ -f $pkg_file.sig ]] && ln -sf "$pkg_file.sig" "${pkg_file/$PKGDEST/$startdir}.sig"
+		if [[ -f $pkg_file.sig ]]; then
+			rm -f "${pkg_file/$PKGDEST/$startdir}.sig"
+			ln -s "$pkg_file.sig" "${pkg_file/$PKGDEST/$startdir}.sig"
+		fi
 	fi
 
 	if (( ret )); then
@@ -1276,7 +1281,8 @@ create_srcpackage() {
 	fi
 
 	if (( ! ret )) && [[ ! "$SRCPKGDEST" -ef "${startdir}" ]]; then
-		ln -sf "${pkg_file}" "${pkg_file/$SRCPKGDEST/$startdir}"
+		rm -f "${pkg_file/$SRCPKGDEST/$startdir}"
+		ln -s "${pkg_file}" "${pkg_file/$SRCPKGDEST/$startdir}"
 		ret=$?
 	fi
 
@@ -1449,6 +1455,13 @@ check_software() {
 	# check for needed software
 	local ret=0
 
+	# check for sudo if we will need it during makepkg execution
+	if (( ! ( ASROOT || INFAKEROOT ) && ( DEP_BIN || RMDEPS || INSTALL ) )); then
+		if ! type -p sudo >/dev/null; then
+			warning "$(gettext "Sudo can not be found. Will use su to acquire root privileges.")"
+		fi
+	fi
+
 	# fakeroot - building as non-root user
 	if [[ $(check_buildenv fakeroot) = "y" ]] && (( EUID > 0 )); then
 		if ! type -p fakeroot >/dev/null; then
@@ -1531,30 +1544,48 @@ devel_check() {
 		# This will only be used on the first call to makepkg; subsequent
 		# calls to makepkg via fakeroot will explicitly pass the version
 		# number to avoid having to determine the version number twice.
-		# Also do a brief check to make sure we have the VCS tool available.
+		# Also do a check to make sure we have the VCS tool available.
 		oldpkgver=$pkgver
 		if [[ -n ${_darcstrunk} && -n ${_darcsmod} ]] ; then
-			type -p darcs >/dev/null || return 0
+			if ! type -p darcs >/dev/null; then
+				warning "$(gettext "Cannot find the %s binary required to determine latest %s revision.")" "darcs" "darcs"
+				return 0
+			fi
 			msg "$(gettext "Determining latest %s revision...")" 'darcs'
 			newpkgver=$(date +%Y%m%d)
 		elif [[ -n ${_cvsroot} && -n ${_cvsmod} ]] ; then
-			type -p cvs >/dev/null || return 0
+			if ! type -p cvs >/dev/null; then
+				warning "$(gettext "Cannot find the %s binary required to determine latest %s revision.")" "cvs" "cvs"
+				return 0
+			fi
 			msg "$(gettext "Determining latest %s revision...")" 'cvs'
 			newpkgver=$(date +%Y%m%d)
 		elif [[ -n ${_gitroot} && -n ${_gitname} ]] ; then
-			type -p git >/dev/null || return 0
+			if ! type -p git >/dev/null; then
+				warning "$(gettext "Cannot find the %s binary required to determine latest %s revision.")" "git "git"
+				return 0
+			fi
 			msg "$(gettext "Determining latest %s revision...")" 'git'
 			newpkgver=$(date +%Y%m%d)
 		elif [[ -n ${_svntrunk} && -n ${_svnmod} ]] ; then
-			type -p svn >/dev/null || return 0
+			if ! type -p svn >/dev/null; then
+				warning "$(gettext "Cannot find the %s binary required to determine latest %s revision.")" "svn" "svn"
+				return 0
+			fi
 			msg "$(gettext "Determining latest %s revision...")" 'svn'
 			newpkgver=$(LC_ALL=C svn info $_svntrunk | sed -n 's/^Last Changed Rev: \([0-9]*\)$/\1/p')
 		elif [[ -n ${_bzrtrunk} && -n ${_bzrmod} ]] ; then
-			type -p bzr >/dev/null || return 0
+			if ! type -p bzr >/dev/null; then
+				warning "$(gettext "Cannot find the %s binary required to determine latest %s revision.")" "bzr" bzr"
+				return 0
+			fi
 			msg "$(gettext "Determining latest %s revision...")" 'bzr'
 			newpkgver=$(bzr revno ${_bzrtrunk})
 		elif [[ -n ${_hgroot} && -n ${_hgrepo} ]] ; then
-			type -p hg >/dev/null || return 0
+			if ! type -p hg >/dev/null; then
+				warning "$(gettext "Cannot find the %s binary required to determine latest %s revision.")" "hg" "hg"
+				return 0
+			fi
 			msg "$(gettext "Determining latest %s revision...")" 'hg'
 			if [[ -d ./src/$_hgrepo ]] ; then
 				cd ./src/$_hgrepo
@@ -1895,13 +1926,6 @@ else
 	if [[ -z $FAKEROOTKEY ]]; then
 		error "$(gettext "Do not use the %s option. This option is only for use by %s.")" "'-F'" "makepkg"
 		exit 1 # TODO: error code
-	fi
-fi
-
-# check for sudo if we will need it during makepkg execution
-if (( ! ( ASROOT || INFAKEROOT ) && ( DEP_BIN || RMDEPS || INSTALL ) )); then
-	if ! type -p sudo >/dev/null; then
-		warning "$(gettext "Sudo can not be found. Will use su to acquire root privileges.")"
 	fi
 fi
 

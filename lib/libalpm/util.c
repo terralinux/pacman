@@ -299,13 +299,13 @@ int _alpm_unpack(pmhandle_t *handle, const char *archive, const char *prefix,
 
 		/* If specific files were requested, skip entries that don't match. */
 		if(list) {
-			char *prefix = strdup(entryname);
+			char *entry_prefix = strdup(entryname);
 			char *p = strstr(prefix,"/");
 			if(p) {
 				*(p+1) = '\0';
 			}
-			char *found = alpm_list_find_str(list, prefix);
-			free(prefix);
+			char *found = alpm_list_find_str(list, entry_prefix);
+			free(entry_prefix);
 			if(!found) {
 				if(archive_read_data_skip(_archive) != ARCHIVE_OK) {
 					ret = 1;
@@ -487,22 +487,22 @@ int _alpm_run_chroot(pmhandle_t *handle, const char *path, char *const argv[])
 	} else {
 		/* this code runs for the parent only (wait on the child) */
 		int status;
-		FILE *pipe;
+		FILE *pipe_file;
 
 		close(pipefd[1]);
-		pipe = fdopen(pipefd[0], "r");
-		if(pipe == NULL) {
+		pipe_file = fdopen(pipefd[0], "r");
+		if(pipe_file == NULL) {
 			close(pipefd[0]);
 			retval = 1;
 		} else {
-			while(!feof(pipe)) {
+			while(!feof(pipe_file)) {
 				char line[PATH_MAX];
-				if(fgets(line, PATH_MAX, pipe) == NULL)
+				if(fgets(line, PATH_MAX, pipe_file) == NULL)
 					break;
 				alpm_logaction(handle, "%s", line);
 				EVENT(handle->trans, PM_TRANS_EVT_SCRIPTLET_INFO, line, NULL);
 			}
-			fclose(pipe);
+			fclose(pipe_file);
 		}
 
 		while(waitpid(pid, &status, 0) == -1) {
@@ -760,9 +760,8 @@ int _alpm_archive_fgets(struct archive *a, struct archive_read_buffer *b)
 					&b->block_size, &offset);
 			b->block_offset = b->block;
 
-			/* error or end of archive with no data read, cleanup */
-			if(b->ret < ARCHIVE_OK ||
-					(b->block_size == 0 && b->ret == ARCHIVE_EOF)) {
+			/* error, cleanup */
+			if(b->ret < ARCHIVE_OK) {
 				goto cleanup;
 			}
 		}
@@ -779,19 +778,20 @@ int _alpm_archive_fgets(struct archive *a, struct archive_read_buffer *b)
 		/* allocate our buffer, or ensure our existing one is big enough */
 		if(!b->line) {
 			/* set the initial buffer to the read block_size */
-			CALLOC(b->line, b->block_size + 1, sizeof(char), return ENOMEM);
+			CALLOC(b->line, b->block_size + 1, sizeof(char), b->ret = -ENOMEM; goto cleanup);
 			b->line_size = b->block_size + 1;
 			b->line_offset = b->line;
 		} else {
 			size_t needed = (size_t)((b->line_offset - b->line)
 					+ (i - b->block_offset) + 1);
 			if(needed > b->max_line_size) {
-				return ERANGE;
+				b->ret = -ERANGE;
+				goto cleanup;
 			}
 			if(needed > b->line_size) {
 				/* need to realloc + copy data to fit total length */
 				char *new;
-				CALLOC(new, needed, sizeof(char), return ENOMEM);
+				CALLOC(new, needed, sizeof(char), b->ret = -ENOMEM; goto cleanup);
 				memcpy(new, b->line, b->line_size);
 				b->line_size = needed;
 				b->line_offset = new + (b->line_offset - b->line);
@@ -813,6 +813,12 @@ int _alpm_archive_fgets(struct archive *a, struct archive_read_buffer *b)
 			memcpy(b->line_offset, b->block_offset, len);
 			b->line_offset += len;
 			b->block_offset = i;
+			/* there was no new data, return what is left; saved ARCHIVE_EOF will be
+			 * returned on next call */
+			if(len == 0) {
+				b->line_offset[0] = '\0';
+				return ARCHIVE_OK;
+			}
 		}
 	}
 
@@ -825,46 +831,54 @@ cleanup:
 	}
 }
 
-int _alpm_splitname(const char *target, pmpkg_t *pkg)
+int _alpm_splitname(const char *target, char **name, char **version,
+		unsigned long *name_hash)
 {
 	/* the format of a db entry is as follows:
 	 *    package-version-rel/
+	 *    package-version-rel/desc (we ignore the filename portion)
 	 * package name can contain hyphens, so parse from the back- go back
 	 * two hyphens and we have split the version from the name.
 	 */
-	const char *version, *end;
+	const char *pkgver, *end;
 
-	if(target == NULL || pkg == NULL) {
+	if(target == NULL) {
 		return -1;
 	}
-	end = target + strlen(target);
 
-	/* remove any trailing '/' */
-	while(*(end - 1) == '/') {
-	  --end;
+	/* remove anything trailing a '/' */
+	end = strchr(target, '/');
+	if(!end) {
+		end = target + strlen(target);
 	}
 
 	/* do the magic parsing- find the beginning of the version string
 	 * by doing two iterations of same loop to lop off two hyphens */
-	for(version = end - 1; *version && *version != '-'; version--);
-	for(version = version - 1; *version && *version != '-'; version--);
-	if(*version != '-' || version == target) {
+	for(pkgver = end - 1; *pkgver && *pkgver != '-'; pkgver--);
+	for(pkgver = pkgver - 1; *pkgver && *pkgver != '-'; pkgver--);
+	if(*pkgver != '-' || pkgver == target) {
 		return -1;
 	}
 
 	/* copy into fields and return */
-	if(pkg->version) {
-		FREE(pkg->version);
+	if(version) {
+		if(*version) {
+			FREE(*version);
+		}
+		/* version actually points to the dash, so need to increment 1 and account
+		 * for potential end character */
+		STRNDUP(*version, pkgver + 1, end - pkgver - 1, return -1);
 	}
-	/* version actually points to the dash, so need to increment 1 and account
-	 * for potential end character */
-	STRNDUP(pkg->version, version + 1, end - version - 1, return -1);
 
-	if(pkg->name) {
-		FREE(pkg->name);
+	if(name) {
+		if(*name) {
+			FREE(*name);
+		}
+		STRNDUP(*name, target, pkgver - target, return -1);
+		if(name_hash) {
+			*name_hash = _alpm_hash_sdbm(*name);
+		}
 	}
-	STRNDUP(pkg->name, target, version - target, return -1);
-	pkg->name_hash = _alpm_hash_sdbm(pkg->name);
 
 	return 0;
 }

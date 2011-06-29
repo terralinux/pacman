@@ -1,33 +1,58 @@
-SUBDIRS = lib/libalpm src/util src/pacman scripts etc test/pacman test/util contrib
-if WANT_DOC
-SUBDIRS += doc
-endif
+OURSCRIPTS = \
+	bacman \
+	pacdiff \
+	paclist \
+	pacscripts \
+	pacsearch
 
-ACLOCAL_AMFLAGS = -I m4 --install
+OURFILES = \
+	bash_completion \
+	zsh_completion
 
-# Make sure we test and build manpages when doing distcheck
-DISTCHECK_CONFIGURE_FLAGS = --enable-doc --disable-git-version
+EXTRA_DIST = \
+	PKGBUILD.vim \
+	bacman.in \
+	bash_completion.in \
+	pacdiff.in \
+	paclist.in \
+	pacscripts.in \
+	pacsearch.in \
+	vimprojects \
+	zsh_completion.in \
+	README
 
-# Some files automatically included, so they aren't specified below:
-#   AUTHORS, COPYING, NEWS, README
-EXTRA_DIST = HACKING
+# Files that should be removed, but which Automake does not know.
+MOSTLYCLEANFILES = $(OURSCRIPTS) $(OURFILES) *.tmp
 
-# Sample makepkg prototype files
-pkgdatadir = ${datadir}/${PACKAGE}
-dist_pkgdata_DATA = PKGBUILD.proto PKGBUILD-split.proto proto.install ChangeLog.proto
+edit = sed \
+	-e 's|@sysconfdir[@]|$(sysconfdir)|g' \
+	-e 's|@localstatedir[@]|$(localstatedir)|g' \
+	-e 's|@BASH_SHELL[@]|$(BASH_SHELL)|g'
 
-# run the pactest test suite and vercmp tests
-check-local: test/pacman test/util src/pacman src/util
-	$(PYTHON) $(top_srcdir)/test/pacman/pactest.py --debug=1 \
-		--test $(top_srcdir)/test/pacman/tests/*.py \
-		-p $(top_builddir)/src/pacman/pacman
-	$(SH) $(top_srcdir)/test/util/vercmptest.sh \
-		$(top_builddir)/src/util/vercmp
+$(OURSCRIPTS): Makefile
+	@echo '    ' GEN $@;
+	@rm -f $@ $@.tmp
+	@$(edit) $(srcdir)/$@.in >$@.tmp
+	@chmod +x $@.tmp
+	@chmod a-w $@.tmp
+	@mv $@.tmp $@
 
-# create the pacman DB and cache directories upon install
-install-data-local:
-	for dir in "$(DESTDIR)$(localstatedir)/lib/pacman" "$(DESTDIR)$(localstatedir)/cache/pacman/pkg"; do \
-	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
-	done
+$(OURFILES): Makefile
+	@echo '    ' GEN $@;
+	@rm -f $@ $@.tmp
+	@$(edit) $(srcdir)/$@.in >$@.tmp
+	@chmod a-w $@.tmp
+	@mv $@.tmp $@
+
+all-am: $(OURSCRIPTS) $(OURFILES)
+
+bacman: $(srcdir)/bacman.in
+bash_completion: $(srcdir)/bash_completion.in
+pacdiff: $(srcdir)/pacdiff.in
+paclist: $(srcdir)/paclist.in
+pacscripts: $(srcdir)/pacscripts.in
+pacsearch: $(srcdir)/pacsearch.in
+pactree: $(srcdir)/pactree.in
+zsh_completion: $(srcdir)/zsh_completion.in
 
 # vim:set ts=2 sw=2 noet:
